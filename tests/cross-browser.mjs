@@ -41,6 +41,13 @@ try {
     await page.locator('#transcriptFormat').selectOption('txt');
     const download = page.waitForEvent('download'); await page.locator('#downloadTranscript').click();
     assert.match(await readFile(await (await download).path(), 'utf8'), /Dictado verificable/);
+    await context.setOffline(true);
+    await page.locator('#transcriptFormat').selectOption('docx');
+    const wordDownload = page.waitForEvent('download');
+    await page.locator('#downloadTranscript').click();
+    const word = await readFile(await (await wordDownload).path());
+    assert.equal(word.readUInt32LE(0), 0x04034b50);
+    assert.ok(word.includes(Buffer.from('Dictado verificable.')));
     assert.deepEqual(errors, [], name + ' ' + device.name + ' JS errors');
     console.log('PASS ' + name + ' ' + device.name + ': diseño, guardado, recarga, TXT');
     await context.close();
