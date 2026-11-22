@@ -1,20 +1,17 @@
-# ECHO-404 v1.6.4-rc.1
+# ECHO-404 1.7.0 RC1
 
-## Alcance
+La captura de micrófono y pestaña usa Web Audio, con dos medidores antes de grabar. Las tomas se escriben aproximadamente cada cinco segundos y se recuperan desde Ajustes. Al interrumpir una grabación en Chromium de CI se restauraron 965.484 bytes y se decodificaron 60,42 segundos de audio simulado tras exportar y restaurar la copia completa.
 
-Candidata de revisión basada en 1.6.2. La grabación conserva el audio en IndexedDB; Whisper local inicia una transcripción automática tras detenerla. TXT, Markdown y DOCX descargan la transcripción. El encabezado del editor confirma el guardado solo cuando SQLite responde; si hay un conflicto o una copia pendiente, lo indica.
+## Prueba de Whisper
 
-## Auditoría y resultados
+Con la versión candidata, el servicio HTTP local y pesos multilingües reales, se procesó una muestra sintética en catalán de 5,98 segundos con small en 4,5 segundos. Reprodujo la frase sobre la reunión en Barcelona y el informe de Marta. Un FLAC español de 5.467,57 segundos (1.521.359 bytes) contiene dos intervenciones separadas por silencio. Base tardó 5,1 segundos y confundió el nombre Marta. Small tardó 10,1 segundos, identificó ambas intervenciones, añadió la palabra «entradas» y alcanzó 859.112 KiB de RSS máxima en esta máquina. El PCM temporal ocupó unos 167 MiB. Estos tiempos dependen de que la mayor parte del archivo sea silencio digital. No se midieron 91 minutos de conversación continua ni 91 minutos de grabación de una llamada.
 
-- Lógica y servidor: `npm run check` y `npm test` (19 pruebas JavaScript y 17 Python) correctos en la preparación de esta RC.
-- Inferencia: Whisper real `base` transcribió una muestra de voz sintética; Ollama local `qwen2.5:3b` devolvió acuerdo, tarea, responsable y fecha. Detalles reproducibles en `QA-v1.6.2.md`.
-- Distribución: el empaquetador mantiene los lanzadores Windows/Linux y excluye SQLite, audios, modelos y entornos virtuales. Se comprueba el ZIP y el arranque de Linux desde una extracción limpia.
-- Seguridad: el servidor escucha en `127.0.0.1`, limita los recursos HTTP, valida origen y revisiones de guardado, y no sirve SQLite. La información en disco y el audio del perfil del navegador no están cifrados.
+Para reproducir una variante con archivos Opus incluidos en el repositorio, ejecuta con ffmpeg y el Python del entorno de IA:
 
-## Comprobaciones pendientes antes de la versión estable
+    python tests/verify_long_whisper.py /ruta/al/modelo/whisper-small
 
-El navegador Chromium de este entorno abortó por una restricción de sockets, por lo que `npm run test:ui` no tiene aquí un resultado de aprobación. El flujo con micrófono físico y los lanzadores Windows 11 y Linux Mint necesitan ejecución en esos sistemas. El trabajo de CI de GitHub ejecutará el navegador con micrófono simulado; las pruebas físicas siguen siendo necesarias. No se certifica una reunión de 90 minutos con transcripción completa: depende de memoria, espacio y velocidad del equipo.
+Los archivos de tests/fixtures contienen voz sintética original generada mediante eSpeak. Las pruebas de interfaz simulan el micrófono y la respuesta de reconocimiento; las pruebas de inferencia anteriores ejecutan el modelo. Quality ejecuta Chromium, Firefox y WebKit en tres tamaños, además del arranque de los lanzadores desde una extracción limpia en Windows y Ubuntu. Cada ejecución publica su ZIP en Artifacts.
 
-## Estado de la candidata
+## Límites de la candidata
 
-El repositorio `ivan7800/ECHO-404` ya existe y esta corrección parte de su rama `main`. La rama de revisión corrige los mensajes de permisos y aclara que GitHub Pages no ejecuta el servidor Python. Antes de una versión estable, confirmar la prueba de navegador en CI y grabar una toma con micrófono físico en Windows y Linux Mint.
+Quedan pendientes sesiones con personas, micrófonos físicos y dispositivos Windows 11, Linux Mint, iPhone y iPad, con suspensión e interrupciones reales. En móvil, mantén la página visible para grabar, o importa una toma de la grabadora del sistema. La captura simultánea de micrófono y pestaña depende del selector y permisos del navegador. La captura general del sistema, las aplicaciones móviles nativas y la sincronización con cuentas quedan fuera de esta candidata. El cuaderno busca citas literales para revisar las propuestas. Una coincidencia de palabras no prueba por sí misma un acuerdo.

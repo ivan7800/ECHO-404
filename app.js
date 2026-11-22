@@ -1,3 +1,4 @@
+import { taskCalendar } from './calendar.js';
 import { prepareCapture } from './capture.js';
 import { VERSION, uid, now, newMeeting, normalizeState, emptyState, meetingMarkdown, extractActions } from './model.js';
 import { initNotebook } from './notebook.js';
@@ -80,6 +81,10 @@ function formatTime(seconds = 0) {
 function audioExtension(type) {
   if (type.includes('mp4')) return '.m4a';
   if (type.includes('ogg')) return '.ogg';
+  if (type.includes('mpeg')) return '.mp3';
+  if (type.includes('wav')) return '.wav';
+  if (type.includes('flac')) return '.flac';
+  if (type.includes('aac')) return '.aac';
   return '.webm';
 }
 function show(view) {
@@ -148,6 +153,11 @@ function organize() {
 async function exportMeeting() {
   persist(); const tasks = store.state.tasks.filter(t => t.meetingId === current.id), type = $('exportFormat').value;
   let content = meetingMarkdown(current, store.state.tasks), mime = 'text/markdown';
+  if (type === 'ics') {
+    try { download(new Blob([taskCalendar(current,tasks)], {type:'text/calendar;charset=utf-8'}), filename() + '.ics'); }
+    catch (error) { toast(error.message); }
+    return;
+  }
   if (type === 'docx' || type === 'txt') {
     try { download(await transcriptFile(content, current.title, type), filename() + '.' + type); }
     catch (error) { toast(error.message); }
@@ -449,6 +459,28 @@ $('recoverTakes').onclick = () => exclusiveAudio(async () => {
   }
   renderEditor(); renderLists(); toast('Recuperación terminada. Consulta las tomas en la reunión.');
 });
+$('importTake').onchange = event => {
+  const file = event.target.files[0]; event.target.value = '';
+  if (!file) return;
+  void exclusiveAudio(async () => {
+    if (!file.size || file.size > 256 * 1024 * 1024) throw Error('Elige un archivo de audio de hasta 256 MiB.');
+    const target = current, id = uid(), probe = document.createElement('audio');
+    const url = URL.createObjectURL(file);
+    try {
+      const duration = await new Promise((resolve,reject) => {
+        const fail = () => { clearTimeout(timer); reject(Error('El navegador no pudo leer la pista de audio. Prueba WAV, MP3 o M4A.')); };
+        const timer = setTimeout(fail,10000);
+        probe.onloadedmetadata = () => { clearTimeout(timer); resolve(Number.isFinite(probe.duration) ? probe.duration : 0); };
+        probe.onerror = fail; probe.src = url;
+      });
+      if (target !== current) throw Error('La reunión cambió. Selecciona otra vez el archivo.');
+      await audioRecord('put', {id, meetingId:target.id, source:'archivo', size:file.size, duration, status:'guardada', createdAt:Date.now(), blob:file});
+      target.audioId = id; target.duration = Math.floor(duration);
+      if (target === current) { persist(); renderEditor(); void updateAI?.transcribeSaved(); }
+      else { const saved = store.state.meetings.find(m => m.id === target.id); if (saved) { saved.audioId = id; store.save(); } }
+    } finally { probe.removeAttribute('src'); probe.load(); URL.revokeObjectURL(url); }
+  });
+};
 $('fullExport').onclick = () => exclusiveAudio(async () => {
   persist(); download(await exportFullBackup(store.state), 'echo-404-completa.echo');
 });

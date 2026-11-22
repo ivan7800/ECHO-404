@@ -1,4 +1,4 @@
-# Voz y actas en ECHO-404 1.6.4 RC1
+# Voz y actas en ECHO-404 1.7.0 RC1
 
 Puedes tomar notas, grabar y organizar tareas desde el primer arranque. Instala Whisper para transcribir audio y Ollama para obtener un borrador del acta. Cada motor funciona de forma independiente.
 
@@ -11,9 +11,9 @@ Puedes tomar notas, grabar y organizar tareas desde el primer arranque. Instala 
 
 En un portátil con poca memoria puedes probar `bash instalar-whisper.sh tiny` en Linux o `INSTALAR_WHISPER.bat --model tiny` en Windows. Para elegir el modelo de mayor tamaño incluido en el instalador usa `small` en el mismo comando. Reinicia la aplicación tras cambiarlo. También puedes iniciar el servidor con `--whisper-model RUTA` para usar un modelo CTranslate2 compatible que ya tengas.
 
-ECHO-404 procesa un archivo por trabajo, con un máximo de 128 MiB y 90 minutos de audio decodificado. Se probaron WAV, FLAC, MP3, M4A, OGG y WebM. El archivo elegido para transcribir se copia temporalmente al servidor de tu equipo. La grabación original del navegador sigue en IndexedDB. El reconocimiento en vivo del navegador es un ajuste independiente que viene desactivado y puede usar servicios externos.
+ECHO-404 procesa un archivo por trabajo, con un máximo de 256 MiB y tres horas de audio decodificado. Se probaron WAV, FLAC, MP3, M4A, OGG y WebM. El archivo elegido para transcribir se copia temporalmente al servidor de tu equipo. La grabación original del navegador sigue en IndexedDB. El reconocimiento en vivo del navegador es un ajuste independiente que viene desactivado y puede usar servicios externos.
 
-Una toma del micrófono se cierra automáticamente a los 90 minutos o al alcanzar unos 128 MiB. Descarga el audio al terminar una reunión importante. El espacio disponible del perfil del navegador puede impedir guardarla antes. La transcripción tiene un tiempo máximo de cómputo de 15 minutos, así que aceptar 90 minutos de audio no garantiza poder procesarlos íntegramente en cualquier equipo. Para reuniones largas, usa sesiones más cortas.
+Whisper decodifica el audio a un archivo temporal mono de 16 kHz (unos 110 MiB por hora). Procesa ventanas de hasta un minuto y muestra el porcentaje completado. Cada avance renueva el plazo de 15 minutos. Un fallo del motor permite reintentar desde la toma guardada.
 
 En dos muestras cortas de voz sintética en español y catalán, `small` conservó mejor el nombre propio y el lugar que `base`. Aun así, cambió unas palabras al final de la frase en catalán. Para actas en estos idiomas conviene revisar personas, fechas y encargos escuchando el original.
 
@@ -31,7 +31,7 @@ El límite es de 20.000 caracteres de notas y transcripción juntos. La aplicaci
 - Puedes seguir editando durante el proceso. Si cambias los campos utilizados, la aplicación bloquea **Aplicar** para proteger tus cambios. Puedes descargar el resultado o generar otra propuesta.
 - Al cerrar la vista previa con × puedes volver a abrirla. **Descartar** libera la propuesta. **Cancelar proceso** interrumpe el trabajo local.
 - ECHO-404 permite un trabajo de IA a la vez y conserva en memoria los últimos ocho resultados mientras el servidor siga abierto. Al recargar la misma pestaña puede recuperar la propuesta del motor. Las correcciones hechas en una vista previa pendiente viven en esa página hasta aplicarlas o descargarlas.
-- El proceso de IA tiene un límite de 15 minutos. Para Ollama el tiempo de espera de la respuesta del modelo es de cuatro minutos. Un error o una cancelación deja intacto el texto anterior.
+- El supervisor permite hasta 15 minutos sin avance. Para Ollama el tiempo de espera de la respuesta del modelo es de cuatro minutos. Un error o una cancelación deja intacto el texto anterior.
 - Si quieres usar solo funciones locales de Ollama en versiones con servicios de nube, el servicio admite `OLLAMA_NO_CLOUD=1`. Configúrala en el entorno del servicio y reinícialo. ECHO-404 solicita un modelo instalado y comprueba sus metadatos antes de enviar el texto. [Configuración de Ollama](https://docs.ollama.com/faq)
 
 Implementación de referencia de las dos interfaces. [faster-whisper](https://github.com/SYSTRAN/faster-whisper) · [API de chat de Ollama](https://docs.ollama.com/api/chat)
