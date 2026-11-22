@@ -1,4 +1,4 @@
-# ECHO-404 v1.6.3-rc.1
+# ECHO-404 v1.6.3-rc.2
 
 ## Alcance
 
@@ -15,24 +15,6 @@ Candidata de revisión basada en 1.6.2. La grabación conserva el audio en Index
 
 El navegador Chromium de este entorno abortó por una restricción de sockets, por lo que `npm run test:ui` no tiene aquí un resultado de aprobación. El flujo con micrófono físico y los lanzadores Windows 11 y Linux Mint necesitan ejecución en esos sistemas. El trabajo de CI de GitHub ejecutará el navegador con micrófono simulado; las pruebas físicas siguen siendo necesarias. No se certifica una reunión de 90 minutos con transcripción completa: depende de memoria, espacio y velocidad del equipo.
 
-## Publicación propuesta
+## Estado de la candidata
 
-El 22 de noviembre se comprobó que `ivan7800/ECHO-404` aún no existe en la cuenta conectada. La CLI local no tiene sesión de GitHub y el navegador de esta sesión pidió iniciar sesión. Por tanto, esta RC está preparada para GitHub, pero todavía no está publicada allí.
-
-Crear un repositorio privado `ivan7800/ECHO-404`, subir esta fuente a la rama `rc/1.6.3`, comprobar que ambos trabajos `Quality` pasan y abrir una PR hacia `main`. Tras probar Windows y Linux Mint con una frase real, publicar la etiqueta `v1.6.3-rc.1` como **prerelease** adjuntando el ZIP generado por `python3 scripts/package.py`. No publicar `echo-404.sqlite3`, `models/`, `.venv-ai/` ni grabaciones.
-
-El paquete de preparación para GitHub incluye `git/ECHO-404-rc.bundle` con dos commits: `main` contiene la fuente 1.6.2 y `rc/1.6.3` contiene esta candidata. Con GitHub CLI autenticada, desde el directorio donde está el bundle:
-
-```bash
-git clone git/ECHO-404-rc.bundle ECHO-404
-cd ECHO-404
-git switch -c main origin/main
-git switch rc/1.6.3
-git remote remove origin
-gh repo create ivan7800/ECHO-404 --private --source=. --remote=origin
-git push -u origin main
-git push -u origin rc/1.6.3
-gh pr create --draft --base main --head rc/1.6.3 --title "ECHO-404 v1.6.3 RC1" --body-file RELEASE-CANDIDATE.md
-```
-
-Estos comandos no se han ejecutado contra GitHub en esta auditoría porque el repositorio no existe y `gh` no tiene sesión iniciada.
+El repositorio `ivan7800/ECHO-404` ya existe y esta corrección parte de su rama `main`. La rama de revisión corrige los mensajes de permisos y aclara que GitHub Pages no ejecuta el servidor Python. Antes de una versión estable, confirmar la prueba de navegador en CI y grabar una toma con micrófono físico en Windows y Linux Mint.

@@ -9,6 +9,24 @@ let toastTimer, draftTimer, current = newMeeting(), taskEditing = null, taskMeet
 let recording = null, recognition = null, stopping = false, speechPrefix = '', ready = false;
 const MAX_RECORD_SECONDS = 90 * 60;
 const MAX_RECORD_BYTES = 128 * 1024 * 1024;
+function microphoneMessage(error) {
+  switch (error?.name) {
+    case 'NotAllowedError': case 'PermissionDeniedError': case 'SecurityError':
+      return 'Micrófono bloqueado. Permite el micrófono para esta página en el icono de permisos de la barra de direcciones y vuelve a pulsar Grabar.';
+    case 'NotFoundError': case 'DevicesNotFoundError':
+      return 'No se detecta ningún micrófono. Conecta uno y comprueba que el sistema lo reconoce.';
+    case 'NotReadableError': case 'TrackStartError':
+      return 'El micrófono está ocupado o el sistema impide abrirlo. Cierra otras apps que lo usen y comprueba sus permisos.';
+    case 'OverconstrainedError': return 'El micrófono no admite los ajustes solicitados.';
+    case 'AbortError': return 'La captura se interrumpió. Comprueba el micrófono e inténtalo de nuevo.';
+    default: return 'No se pudo iniciar la captura de audio. Comprueba los permisos del navegador y el micrófono.';
+  }
+}
+function audioStatus(message, isError = false) {
+  $('audioState').textContent = message;
+  $('audioState').classList.toggle('error', isError);
+  if (isError) toast(message);
+}
 const labels = { high: 'Alta', normal: 'Normal', low: 'Baja', todo: 'Pendiente', doing: 'En curso', done: 'Completada' };
 let store, updateAI;
 store = new Store((text, warning) => {
@@ -49,7 +67,7 @@ function renderEditor() {
   for (const key of ['title', 'project', 'notes', 'transcript', 'summary', 'decisions']) $(key === 'title' ? 'meetingTitle' : key).value = current[key] || '';
   $('tags').value = current.tags.join(', ');
   $('status').textContent = store.conflict ? 'Conflicto de guardado' : store.pending ? 'Pendiente de sincronizar' : store.state.meetings.some(m => m.id === current.id) ? 'Guardada' : 'Borrador';
-  $('timer').textContent = formatTime(current.duration); $('audioState').textContent = current.audioId ? 'Audio disponible en este navegador' : 'Listo para grabar';
+  $('timer').textContent = formatTime(current.duration); audioStatus(current.audioId ? 'Audio disponible en este navegador' : 'Listo para grabar');
   $('downloadAudio').classList.toggle('hidden', !current.audioId); $('speechState').textContent = '';
   renderMeetingTasks();
   updateAI?.();
@@ -171,11 +189,13 @@ async function toggleRecording() {
     else await finalizeRecording(recording);
     return;
   }
-  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { toast('Este navegador no permite grabar audio'); return; }
+  if (!window.isSecureContext) { audioStatus('Abre ECHO-404 en HTTPS o en localhost para permitir el micrófono.', true); return; }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { audioStatus('Este navegador no ofrece captura de micrófono. Prueba Chrome, Edge o Firefox actualizado.', true); return; }
   $('record').disabled = true; let stream;
   try {
+    audioStatus('Solicitando permiso de micrófono…');
     stream = await navigator.mediaDevices.getUserMedia({ audio: true }); collect();
-    const mimeType = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].find(type => MediaRecorder.isTypeSupported(type));
+    const mimeType = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].find(type => MediaRecorder.isTypeSupported?.(type));
     const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
     const session = { recorder, stream, chunks: [], bytes: 0, meetingId: current.id, started: performance.now(), timer: null };
     recording = session;
@@ -188,7 +208,7 @@ async function toggleRecording() {
         void toggleRecording();
       }
     };
-    recorder.onerror = () => { toast('Error de grabación. Intentando conservar el audio disponible.'); if (recorder.state !== 'inactive') recorder.stop(); else finalizeRecording(session); };
+    recorder.onerror = event => { audioStatus('Error de grabación. Intentando conservar el audio disponible.', true); if (recorder.state !== 'inactive') recorder.stop(); else finalizeRecording(session); };
     recorder.onstop = () => finalizeRecording(session);
     for (const track of stream.getAudioTracks()) track.addEventListener('ended', () => {
       if (recording === session && !stopping) {
@@ -197,7 +217,7 @@ async function toggleRecording() {
       }
     });
     recorder.start(5000); $('record').textContent = 'Detener'; $('recordDot').classList.add('live'); $('recordDot').closest('.recbar').classList.add('recording'); $('status').textContent = 'Grabando';
-    $('audioState').textContent = 'Micrófono activo'; $('newMeeting').disabled = true;
+    audioStatus('Micrófono activo · grabando'); $('newMeeting').disabled = true;
     session.timer = setInterval(() => {
       current.duration = Math.floor((performance.now() - session.started) / 1000);
       $('timer').textContent = formatTime(current.duration);
@@ -209,7 +229,7 @@ async function toggleRecording() {
     persist(); startSpeech();
   } catch (error) {
     stream?.getTracks().forEach(track => track.stop()); recording = null;
-    toast(error.name === 'NotAllowedError' ? 'Permiso de micrófono denegado' : 'No se pudo iniciar la grabación');
+    audioStatus(microphoneMessage(error), true);
   } finally { $('record').disabled = false; }
 }
 async function finalizeRecording(session) {
