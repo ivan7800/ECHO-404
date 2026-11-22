@@ -1,3 +1,4 @@
+import { askMeetings } from './notebook.js';
 import { uid, now } from './model.js';
 import { transcriptFile, transcriptFilename } from './transcript-export.js';
 
@@ -177,6 +178,23 @@ export function setupAI({ meeting, audio, blocked, apply, download, onTranscript
       $('aiDraftTasks').replaceChildren(...proposal.tasks.map(taskDraft));
       draftLoaded = true;
     } else if (!isSummary) $('aiPreview').textContent = transcriptPreview(proposal);
+    $('actaSources').hidden = !isSummary;
+    $('actaSources').ontoggle = () => {
+      if (!isSummary || !$('actaSources').open) return;
+      $('actaMatches').replaceChildren();
+      const source = {...meeting(), ...ticket.source};
+      const draft = edited();
+      for (const claim of [draft.summary, ...draft.decisions, ...draft.tasks.map(t => t.text)].filter(Boolean)) {
+        const row = document.createElement('p'), title = document.createElement('strong');
+        title.textContent = claim;
+        row.append(title);
+        const [hit] = askMeetings([source], claim, {transcriptOnly:true, limit:1});
+        const quote = document.createElement('blockquote');
+        quote.textContent = hit ? '«' + hit.quote + '» · carácter ' + (hit.offset + 1) : 'Sin coincidencias en la transcripción.';
+        row.append(quote); $('actaMatches').append(row);
+      }
+    };
+    $('actaSources').open = false;
     $('aiApply').disabled = !applicable();
     $('aiEffect').textContent = ticket.kind === 'transcription' && !proposal.text.trim() ? 'Whisper no detectó voz. Se conserva tu transcripción.' :
       $('aiApply').disabled ? 'Para aplicar, abre la reunión de origen con su contenido original y termina cualquier grabación. Puedes descargar la propuesta.' :

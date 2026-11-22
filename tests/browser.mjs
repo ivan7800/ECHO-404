@@ -213,6 +213,17 @@ try {
     assert.match(await page.locator('#audioState').textContent(), /Transcripción guardada/);
     await page.unrouteAll();
   });
+  await check('Import a voice memo and export the dated task calendar', async () => {
+    const count = await page.locator('#recordingLibrary button').count();
+    await page.locator('#importTake').setInputFiles(resolve(import.meta.dirname, 'fixtures/es.ogg'));
+    await page.waitForFunction(n => document.querySelectorAll('#recordingLibrary button').length === n + 1, count);
+    await page.locator('#exportFormat').selectOption('ics');
+    const promise = page.waitForEvent('download'); await page.locator('#export').click();
+    const body = await readFile(await (await promise).path(), 'utf8');
+    assert.match(body, /DTSTART;VALUE=DATE:20261123/);
+    assert.match(body, /SUMMARY:Validar túnel/);
+    await page.locator('#exportFormat').selectOption('md');
+  });
   await check('Mobile navigation and layout work without horizontal overflow', async () => {
     await page.setViewportSize({ width: 390, height: 844 }); await page.locator('[data-view="meetings"]').click();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
