@@ -57,3 +57,16 @@ jobs:
       - run: npm run test:cross
         env:
           ECHO_BROWSER: ${{ matrix.browser }}
+
+  launcher:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/package.py
+      - run: python scripts/test_launcher.py
