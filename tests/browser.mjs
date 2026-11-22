@@ -216,17 +216,20 @@ try {
     await page.locator('#newMeeting').click();
     await page.locator('#meetingTitle').fill('Recuperación');
     await page.locator('#record').click();
-    await page.waitForFunction(async () => {
-      const db = await import('./storage.js');
-      return (await db.listRecordingDrafts()).some(d => d.count >= 12);
-    }, null, {timeout: 100000});
-    const before = await page.evaluate(async () => (await (await import('./storage.js')).listRecordingDrafts())[0]);
+    const deadline = Date.now() + 100000;
+    let before;
+    while (Date.now() < deadline) {
+      before = await page.evaluate(async () => (await (await import('./storage.js')).listRecordingDrafts()).find(d => d.count >= 12));
+      if (before) break;
+      await page.waitForTimeout(500);
+    }
+    assert.ok(before, 'Expected twelve committed five-second fragments');
     assert.ok(before.bytes > 1000);
     await page.reload(); await waitSaved(page);
     await page.locator('[data-view="settings"]').click();
     await page.locator('#recoverTakes').click();
     await page.waitForFunction(() => document.querySelectorAll('#recordingLibrary button').length > 0);
-    await page.waitForFunction(async () => !(await (await import('./storage.js')).listRecordingDrafts()).length);
+    assert.equal(await page.evaluate(async () => (await (await import('./storage.js')).listRecordingDrafts()).length), 0);
     await page.waitForTimeout(650); await waitSaved(page);
     const promise = page.waitForEvent('download'); await page.locator('#fullExport').click();
     const backup = await (await promise).path();
