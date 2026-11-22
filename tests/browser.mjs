@@ -143,17 +143,19 @@ try {
     assert.ok((await readFile(await (await promise).path())).length > 0);
   });
   await check('Fake microphone records persistent audio and disables meeting changes', async () => {
+    const count = await page.locator('#recordingLibrary button').count();
     await page.locator('[data-view="dashboard"]').click(); await page.locator('#record').click(); await page.waitForTimeout(900);
     assert.equal(await page.locator('#newMeeting').isDisabled(), true); await page.locator('#record').click();
     await page.locator('#downloadAudio').waitFor({ state: 'visible' }); await page.waitForTimeout(650); await waitSaved(page);
     await page.reload(); await waitSaved(page); const filePromise = page.waitForEvent('download'); await page.locator('#downloadAudio').click();
     const file = await filePromise; assert.ok((await readFile(await file.path())).length > 0);
     await page.locator('#record').click(); await page.waitForTimeout(700); await page.locator('#record').click();
-    await page.waitForFunction(() => document.querySelectorAll('#recordingLibrary button').length >= 2);
+    await page.waitForFunction(expected => document.querySelectorAll('#recordingLibrary button').length === expected, count + 2);
     await page.reload(); await waitSaved(page);
-    assert.equal(await page.locator('#recordingLibrary button').count(), 2);
+    assert.equal(await page.locator('#recordingLibrary button').count(), count + 2);
   });
   await check('Prepared mixed capture meters, pause, resume and disconnect', async () => {
+    const count = await page.locator('#recordingLibrary button').count();
     await page.locator('#captureMode').evaluate(el => { el.closest('details').open = true; });
     await page.evaluate(() => {
       navigator.mediaDevices.getDisplayMedia = async () => {
@@ -170,7 +172,7 @@ try {
     assert.equal(await page.locator('#pauseCapture').textContent(), 'Reanudar');
     await page.locator('#pauseCapture').click(); await page.waitForTimeout(750);
     await page.evaluate(() => window.testSharedTrack.dispatchEvent(new Event('ended')));
-    await page.waitForFunction(() => document.querySelectorAll('#recordingLibrary button').length === 4);
+    await page.waitForFunction(expected => document.querySelectorAll('#recordingLibrary button').length === expected, count + 1);
   });
   await check('Browser speech appears live and remains saved after reload', async () => {
     await page.evaluate(() => { window.SpeechRecognition = class {
