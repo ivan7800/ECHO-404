@@ -108,6 +108,40 @@ try {
     await page.locator('[data-view="tasks"]').click(); await page.locator('#taskSearch').fill('Roig'); await page.locator('#taskStatus').selectOption('done'); await page.locator('#taskPriority').selectOption('high');
     assert.equal(await page.locator('#tasksList .task-row').count(), 1);
   });
+  await check('Denied microphone permission reports recovery and allows retry', async () => {
+    await page.locator('[data-view="dashboard"]').click();
+    await page.evaluate(() => {
+      const media = navigator.mediaDevices;
+      window.__realGetUserMedia = media.getUserMedia.bind(media);
+      media.getUserMedia = async () => { throw new DOMException('Permission denied', 'NotAllowedError'); };
+    });
+    await page.locator('#record').click();
+    await page.waitForFunction(() => document.getElementById('audioState').textContent.includes('Micrófono bloqueado'));
+    assert.equal(await page.locator('#record').isEnabled(), true);
+    await page.evaluate(() => { navigator.mediaDevices.getUserMedia = window.__realGetUserMedia; });
+  });
+  await check('Tab audio requires a shared audio track and records when supplied', async () => {
+    await page.evaluate(() => {
+      navigator.mediaDevices.getDisplayMedia = async () => {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        return stream;
+      };
+    });
+    await page.locator('#recordTab').click();
+    await page.waitForFunction(() => document.getElementById('audioState').textContent.includes('Compartir audio'));
+    await page.locator('#record').waitFor({ state: 'visible' });
+    await page.waitForFunction(() => !document.getElementById('record').disabled && !document.getElementById('recordTab').disabled);
+    await page.evaluate(() => {
+      navigator.mediaDevices.getDisplayMedia = () => navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+    });
+    await page.locator('#recordTab').click();
+    await page.waitForFunction(() => document.getElementById('audioState').textContent.includes('Audio de pestaña activo'));
+    await page.waitForTimeout(900); await page.locator('#record').click();
+    await page.locator('#downloadAudio').waitFor({ state: 'visible' });
+    await page.waitForTimeout(650); await waitSaved(page);
+    const promise = page.waitForEvent('download'); await page.locator('#downloadAudio').click();
+    assert.ok((await readFile(await (await promise).path())).length > 0);
+  });
   await check('Fake microphone records persistent audio and disables meeting changes', async () => {
     await page.locator('[data-view="dashboard"]').click(); await page.locator('#record').click(); await page.waitForTimeout(900);
     assert.equal(await page.locator('#newMeeting').isDisabled(), true); await page.locator('#record').click();
