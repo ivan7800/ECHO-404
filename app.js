@@ -475,9 +475,22 @@ $('restoreBackup').onclick = () => {
 $('clearData').onclick = async () => {
   if (opening || recording || stopping) { toast('Detén la grabación antes de vaciar'); return; }
   if (!confirm('¿Vaciar reuniones, tareas y audio de este espacio? Descarga una copia antes de continuar.')) return;
-  try { await audioRecord('clear'); } catch { toast('No se pudo borrar audio: revisa los permisos del navegador'); return; }
-  for (const key of ['echo404-data', 'echo404-last-backup', 'echo404-before-conflict']) localStorage.removeItem(key);
-  store.state = emptyState(); store.save(); current = newMeeting(); renderEditor(); renderSettings(); renderLists(); toast('Espacio vaciado');
+  await exclusiveAudio(async () => {
+    if (store.conflict || store.busy || (store.revision !== null && !store.connected)) throw Error('Reconecta SQLite y resuelve los conflictos antes de vaciar.');
+    const blank = emptyState();
+    if (store.connected) {
+      const response = await fetch('/api/state', {method:'PUT', headers:{'Content-Type':'application/json','X-Echo-Client':'echo-404'},
+        body:JSON.stringify({expectedRevision:store.revision,state:blank,purgeHistory:true})});
+      if (!response.ok) throw Error('SQLite no confirmó el borrado. Comprueba la conexión y la revisión.');
+      store.revision = (await response.json()).revision;
+    }
+    clearTimeout(draftTimer); clearTimeout(store.timer);
+    store.state = blank; store.pending = false; store.cache(); current = newMeeting();
+    renderEditor(); renderSettings(); renderLists();
+    for (const key of ['echo404-data','echo404-last-backup','echo404-before-conflict','echo404-current']) localStorage.removeItem(key);
+    sessionStorage.removeItem('echo404-ai-ticket-1');
+    await audioRecord('clear'); toast('Espacio vaciado');
+  });
 };
 async function reconnect() {
   if (store.busy) { toast('Espera a que termine el guardado'); return; }

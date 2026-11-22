@@ -162,7 +162,15 @@ class Handler(BaseHTTPRequestHandler):
                 if payload['expectedRevision'] != revision:
                     self.send_json({'error': 'conflict', 'revision': revision}, 409)
                     return
-                if state['settings'].get('autoBackup', True):
+                if payload.get('purgeHistory') is True:
+                    if state['meetings'] or state['tasks']:
+                        raise ValueError('Solo se puede purgar un espacio vacío')
+                    conn.execute('PRAGMA secure_delete=ON')
+                    conn.execute('DELETE FROM snapshots')
+                    for table in ('tasks', 'meetings'):
+                        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+                            conn.execute('DELETE FROM ' + table)
+                elif state['settings'].get('autoBackup', True):
                     conn.execute('INSERT OR REPLACE INTO snapshots VALUES(?,?,?)', (revision, previous, datetime.now(timezone.utc).isoformat()))
                     conn.execute('DELETE FROM snapshots WHERE revision NOT IN (SELECT revision FROM snapshots ORDER BY revision DESC LIMIT 10)')
                 conn.execute('UPDATE app_state SET revision=?,body=? WHERE id=1', (revision + 1, body))

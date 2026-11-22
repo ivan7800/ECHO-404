@@ -120,6 +120,14 @@ try {
     assert.equal(await page.locator('#record').isEnabled(), true);
     await page.evaluate(() => { navigator.mediaDevices.getUserMedia = window.__realGetUserMedia; });
   });
+  await check('Missing microphone gives a device-specific recovery message', async () => {
+    await page.evaluate(() => {
+      navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Missing', 'NotFoundError'); };
+    });
+    await page.locator('#record').click();
+    await page.waitForFunction(() => document.getElementById('audioState').textContent.includes('ningún micrófono'));
+    await page.evaluate(() => { navigator.mediaDevices.getUserMedia = window.__realGetUserMedia; });
+  });
   await check('Tab audio requires a shared audio track and records when supplied', async () => {
     await page.evaluate(() => {
       navigator.mediaDevices.getDisplayMedia = async () => {
@@ -249,6 +257,19 @@ try {
     await page.locator('[data-view="meetings"]').click();
     await page.locator('#search').fill('Seguimiento VPN');
     await page.locator('[data-open]').first().click(); await waitSaved(page);
+  });
+  await check('Storage quota failure is visible and stops capture', async () => {
+    await page.evaluate(() => {
+      const add = IDBObjectStore.prototype.add;
+      IDBObjectStore.prototype.add = function(...args) {
+        if (this.name === 'chunks') throw new DOMException('Full', 'QuotaExceededError');
+        return add.apply(this, args);
+      };
+    });
+    await page.locator('#record').click();
+    await page.waitForFunction(() => document.getElementById('audioState').textContent.includes('Guardado interrumpido'));
+    assert.ok(await page.locator('#newMeeting').isEnabled());
+    await page.reload(); await waitSaved(page);
   });
   await check('Offline shell opens without caching API responses', async () => {
     await page.evaluate(() => navigator.serviceWorker.ready); await page.waitForTimeout(500);
