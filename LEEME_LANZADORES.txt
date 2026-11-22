@@ -1,0 +1,17 @@
+ECHO-404 1.6.3 RC1 — Windows / Linux
+
+1. EXTRAER el ZIP completo. No ejecutar desde dentro del ZIP.
+2. Requisito: Python 3.9 o posterior.
+3. Windows: doble clic en INICIAR_ECHO-404.bat.
+   Linux: abrir terminal en la carpeta y ejecutar bash iniciar-echo-404.sh
+4. Se abre http://127.0.0.1:4173/
+5. Mantener la consola abierta. Ctrl+C detiene el servidor.
+
+No necesita elevacion, instalacion con npm ni cambios de politica de PowerShell.
+Si el puerto esta ocupado, detenga la instancia anterior. No se termina ningun proceso ajeno automaticamente.
+Los datos se guardan en echo-404.sqlite3 y en el navegador.
+Descargue copias JSON y audio desde la aplicacion antes de limpiar el navegador.
+
+README.md explica actualizacion, conflictos, almacenamiento y limitaciones.
+Para activar Whisper, usa INSTALAR_WHISPER.bat o bash instalar-whisper.sh.
+CONFIGURACION-IA.md explica la instalacion de los modelos y el uso de Ollama.

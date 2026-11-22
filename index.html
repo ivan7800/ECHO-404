@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111518"><meta name="description" content="Tu espacio local para reuniones, decisiones y tareas.">
+  <title>ECHO-404 · Reuniones con claridad</title>
+  <script src="theme-init.js"></script>
+  <link rel="icon" href="icon.svg" type="image/svg+xml"><link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="theme.css">
+</head>
+<body>
+<a class="skip" href="#main">Saltar al contenido</a>
+<div class="app">
+  <aside class="sidebar">
+    <a class="brand" href="./"><img src="icon.svg" width="30" height="30" alt="">ECHO<span>404</span></a>
+    <nav aria-label="Navegación principal">
+      <button data-view="dashboard" class="active"><span aria-hidden="true">◈</span> Mi reunión</button>
+      <button data-view="meetings"><span aria-hidden="true">▤</span> Biblioteca <small id="meetingCount">0</small></button>
+      <button data-view="tasks"><span aria-hidden="true">✓</span> Tareas <small id="taskCount">0</small></button>
+      <button data-view="settings"><span aria-hidden="true">⚙</span> Ajustes</button>
+    </nav>
+    <div class="sidebar-footer"><span class="local-dot"></span> Espacio personal <small>ECHO-404 · 1.6.3 RC1</small></div>
+  </aside>
+  <main id="main">
+    <header class="topbar">
+      <div><p class="eyebrow">ESPACIO DE REUNIONES</p><h1 id="pageTitle">Mi reunión</h1></div>
+      <div class="header-actions"><button id="themeToggle" aria-label="Activar modo claro" title="Cambiar entre modo claro y oscuro">◐ <span>Modo oscuro</span></button><button id="newMeeting" class="primary">＋ Nueva reunión</button></div>
+    </header>
+    <div class="save-line"><span id="saveState" role="status">Abriendo tu espacio…</span><button id="retrySync" class="text-button">Reconectar</button></div>
+    <div id="conflict" class="notice hidden" role="alert"><p>Otra ventana ha guardado cambios. Descarga tu copia antes de cargar la versión del servidor.</p><button id="conflictExport">Descargar mi copia</button><button id="conflictReload">Cargar versión del servidor</button></div>
+
+    <section id="dashboard" class="view">
+      <div class="workspace">
+        <article class="card editor">
+          <div class="card-head editor-heading"><div><p class="section-kicker">SESIÓN ACTIVA</p><span id="status" class="badge">Borrador</span></div><span class="local-status"><i></i> Solo en tu equipo</span></div>
+          <label class="sr-only" for="meetingTitle">Título de la reunión</label><input id="meetingTitle" class="title-input" value="Nueva reunión" maxlength="300">
+          <div class="meeting-meta"><label>Proyecto<input id="project" placeholder="Sin proyecto" maxlength="100"></label><label>Etiquetas<input id="tags" placeholder="soporte, equipo…" maxlength="800"></label></div>
+          <div class="recbar"><div class="record-pulse"><span id="recordDot" class="record-dot"></span></div><div class="record-info"><small>CAPTURA DE AUDIO</small><b id="timer">00:00:00</b><em id="audioState">Listo para grabar</em></div><div class="record-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><button id="record" class="record-button">Iniciar grabación</button></div>
+          <p class="hint record-hint">Al detener, el audio queda guardado en este navegador. Si Whisper está instalado, la transcripción se inicia y se guarda automáticamente. Máximo: 90 minutos o 128 MiB. Informa a los participantes.</p>
+          <div class="tabs" role="tablist" aria-label="Contenido"><button id="notesTab" role="tab" aria-selected="true" aria-controls="notesPanel" class="active">Notas</button><button id="transcriptTab" role="tab" aria-selected="false" aria-controls="transcriptPanel">Transcripción</button></div>
+          <div id="notesPanel" role="tabpanel" aria-labelledby="notesTab"><label class="sr-only" for="notes">Notas privadas</label><textarea id="notes" placeholder="Ideas, contexto y detalles que no quieres perder…"></textarea></div>
+          <div id="transcriptPanel" role="tabpanel" aria-labelledby="transcriptTab" hidden><label class="sr-only" for="transcript">Transcripción editable</label><textarea id="transcript" placeholder="Pega una transcripción o activa el reconocimiento de voz en Ajustes."></textarea><p id="speechState" class="hint" role="status"></p><div class="transcript-download"><label for="transcriptFormat">Archivo de transcripción</label><select id="transcriptFormat"><option value="txt">TXT</option><option value="md">Markdown</option><option value="docx">Word DOCX</option></select><button id="downloadTranscript">Descargar transcripción</button></div></div>
+          <div class="editor-actions"><button id="saveMeeting" class="primary">Guardar reunión</button><button id="summarize">✦ Organizar notas</button><label class="sr-only" for="exportFormat">Formato de exportación</label><select id="exportFormat"><option value="md">Markdown</option><option value="json">JSON</option><option value="html">HTML</option></select><button id="export">Exportar</button><button id="downloadAudio" class="hidden">Audio ↓</button></div>
+          <p class="hint action-hint">Guardado automático activado. Organiza las notas cuando quieras revisar acuerdos y acciones.</p>
+          <details id="aiTools" class="ai-tools">
+            <summary>Asistente local</summary>
+            <div class="ai-section">
+              <h3>Transcribir audio</h3>
+              <p class="hint" id="whisperStatus">Comprobando Whisper…</p>
+              <div class="editor-actions">
+                <label>Idioma del audio<select id="aiLanguage"><option value="auto">Detectar</option><option value="es">Español</option><option value="ca">Català</option><option value="en">English</option></select></label>
+                <button id="aiRecording">Usar grabación guardada</button><button id="aiChoose">Elegir archivo…</button>
+                <input type="file" id="aiFile" accept="audio/*,.m4a,.flac,.webm,.wav,.mp3,.ogg" hidden>
+              </div>
+            </div>
+            <div class="ai-section">
+              <h3>Preparar acta</h3>
+              <p class="hint" id="ollamaStatus">Comprobando Ollama…</p>
+              <div class="editor-actions"><label>Modelo local<select id="aiModel"></select></label><button id="aiSummary">Proponer acta</button></div>
+            </div>
+            <div class="editor-actions"><button id="aiRefresh">Comprobar motores</button><button id="aiCancel" hidden>Cancelar proceso</button><button id="aiReview" hidden>Revisar propuesta</button></div>
+            <p id="aiMessage" class="hint" role="status"></p>
+          </details>
+        </article>
+        <div class="detail-column">
+          <article class="card insight-card summary-card"><div class="card-head"><div><p class="section-kicker">SÍNTESIS</p><h2>Resumen</h2></div><span class="badge soft">Editable</span></div><label class="sr-only" for="summary">Resumen de la reunión</label><textarea id="summary" class="compact" placeholder="Tu síntesis de la reunión…"></textarea></article>
+          <article class="card insight-card decision-card"><div class="card-head"><div><p class="section-kicker">ACUERDOS</p><h2>Decisiones</h2></div><span class="card-symbol" aria-hidden="true">↗</span></div><label class="sr-only" for="decisions">Decisiones acordadas</label><textarea id="decisions" class="compact" placeholder="Qué se ha acordado y por qué…"></textarea></article>
+          <article class="card insight-card task-card"><div class="card-head"><div><p class="section-kicker">EJECUCIÓN</p><h2>Próximos pasos</h2></div><button id="addMeetingTask" class="text-button">＋ Tarea</button></div><div id="meetingTasks"></div></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="meetings" class="view" hidden>
+      <article class="card"><div class="card-head"><h2>Tu memoria de trabajo</h2><span id="libraryCount" class="muted"></span></div><div class="filters"><label>Buscar<input id="search" type="search" placeholder="Título, notas, decisiones…"></label><label>Proyecto<select id="projectFilter"><option value="">Todos</option></select></label><label>Etiqueta<select id="tagFilter"><option value="">Todas</option></select></label></div><div id="meetingList" class="meeting-list"></div></article>
+    </section>
+
+    <section id="tasks" class="view" hidden>
+      <article class="card"><div class="card-head"><h2>Del acuerdo a la acción</h2><button id="addTask" class="primary">＋ Nueva tarea</button></div><div class="filters task-filters"><label>Buscar<input id="taskSearch" type="search" placeholder="Tarea o responsable…"></label><label>Estado<select id="taskStatus"><option value="">Todos</option><option value="todo">Pendiente</option><option value="doing">En curso</option><option value="done">Completada</option></select></label><label>Prioridad<select id="taskPriority"><option value="">Todas</option><option value="high">Alta</option><option value="normal">Normal</option><option value="low">Baja</option></select></label></div><div id="tasksList"></div></article>
+    </section>
+
+    <section id="settings" class="view settings-grid" hidden>
+      <article class="card"><h2>Tu experiencia</h2><label class="setting-row">Idioma de voz<select id="language"><option value="es-ES">Español</option><option value="ca-ES">Català</option><option value="en-US">English</option></select></label><label class="setting-row"><span>Copia local automática<small>Cada minuto y antes de reemplazar datos. No incluye audio.</small></span><input id="autoBackup" type="checkbox"></label><label class="setting-row"><span>Reconocimiento de voz del navegador<small>Puede enviar voz al proveedor del navegador y necesitar Internet.</small></span><input id="speechEnabled" type="checkbox"></label><p class="hint">No hay sincronización con servicios externos. SQLite guarda texto y tareas; el audio permanece en este navegador.</p></article>
+      <article class="card"><h2>Copias y recuperación</h2><p class="muted">La copia JSON incluye reuniones, decisiones, tareas y preferencias. Descarga los audios por separado.</p><div class="button-stack"><button id="backupExport">Descargar copia JSON</button><button id="backupImportButton">Importar copia JSON</button><input id="backupImport" type="file" accept="application/json" hidden><button id="restoreBackup">Recuperar última copia local</button></div><button id="clearData" class="danger-outline">Vaciar este espacio</button><p class="hint">Vaciar elimina texto y tareas en SQLite al sincronizar y audio en este navegador. Conserva las copias descargadas.</p></article>
+    </section>
+  </main>
+</div>
+<dialog id="taskDialog" aria-labelledby="taskDialogTitle"><form id="taskForm"><div class="card-head"><h2 id="taskDialogTitle">Nueva tarea</h2><button type="button" id="closeTask" aria-label="Cerrar">×</button></div><label>Tarea<input id="taskText" required maxlength="2000" placeholder="¿Qué hay que hacer?"></label><label>Responsable<input id="taskOwner" maxlength="100" placeholder="Sin asignar"></label><div class="form-grid"><label>Prioridad<select id="taskFormPriority"><option value="normal">Normal</option><option value="high">Alta</option><option value="low">Baja</option></select></label><label>Fecha límite<input id="taskDue" type="date"></label></div><label>Estado<select id="taskFormStatus"><option value="todo">Pendiente</option><option value="doing">En curso</option><option value="done">Completada</option></select></label><p id="taskMeetingLabel" class="hint"></p><div class="dialog-actions"><button type="button" id="deleteTask" class="danger-outline hidden">Eliminar</button><button type="button" id="cancelTask">Cancelar</button><button type="submit" class="primary">Guardar tarea</button></div></form></dialog>
+<dialog id="aiDialog" aria-labelledby="aiTitle">
+  <div class="card-head"><h2 id="aiTitle">Revisar propuesta</h2><button id="aiClose" aria-label="Cerrar propuesta">×</button></div>
+  <p class="hint" id="aiTarget"></p><pre id="aiPreview"></pre>
+  <div id="aiEdit" hidden>
+    <label>Resumen<textarea id="aiSummaryDraft" class="compact" maxlength="20000"></textarea></label>
+    <label>Decisiones · una por línea<textarea id="aiDecisionsDraft" class="compact" maxlength="200000"></textarea></label>
+    <h3>Tareas propuestas</h3><div id="aiDraftTasks"></div><button id="aiAddDraft">Añadir tarea al acta</button>
+  </div>
+  <p class="hint" id="aiEffect"></p>
+  <div class="dialog-actions"><button id="aiDownload">Descargar JSON</button><label id="aiTranscriptFormatLabel" hidden>Formato de transcripción <select id="aiTranscriptFormat"><option value="txt">TXT</option><option value="md">Markdown</option><option value="docx">Word DOCX</option></select></label><button id="aiTranscriptDownload" hidden>Descargar transcripción</button><button id="aiDiscard">Descartar</button><button class="primary" id="aiApply">Aplicar</button></div>
+</dialog>
+<div id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

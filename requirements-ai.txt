@@ -1,0 +1,5 @@
+# Optional, installed inside .venv-ai by the setup launchers.
+faster-whisper==1.2.1
+# PyAV 19 removed the av.open metadata_errors argument used by this engine.
+av==15.1.0
+socksio==1.0.0
