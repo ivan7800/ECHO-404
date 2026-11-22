@@ -15,7 +15,11 @@ if __name__ == '__main__':
     payload = json.loads((directory / 'input.json').read_text(encoding='utf-8'))
     try:
         if payload['kind'] == 'transcription':
-            result = transcribe(directory / 'audio', payload['modelPath'], payload['language'])
+            def report(done, total):
+                temporary = directory / 'progress.tmp'
+                temporary.write_text(str(int(done * 100 / total)), encoding='ascii')
+                temporary.replace(directory / 'progress')
+            result = transcribe(directory / 'audio', payload['modelPath'], payload['language'], report)
         else:
             result = summarize(payload['text'], payload['model'])
         response = {'result': result}

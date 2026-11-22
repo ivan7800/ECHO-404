@@ -16,9 +16,9 @@ from local_ai import AIError
 from document_export import word_document
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '1.6.4-rc.1'
+VERSION = '1.7.0-rc.1'
 ASSETS = {'index.html': 'text/html', 'styles.css': 'text/css', 'theme.css': 'text/css',
-          'app.js': 'text/javascript', 'model.js': 'text/javascript', 'storage.js': 'text/javascript',
+          'app.js': 'text/javascript', 'capture.js': 'text/javascript', 'calendar.js': 'text/javascript', 'notebook.js': 'text/javascript', 'model.js': 'text/javascript', 'storage.js': 'text/javascript',
           'theme-init.js': 'text/javascript', 'ai-client.js': 'text/javascript', 'sw.js': 'text/javascript',
           'transcript-export.js': 'text/javascript',
           'manifest.webmanifest': 'application/manifest+json', 'icon.svg': 'image/svg+xml'}
@@ -162,7 +162,15 @@ class Handler(BaseHTTPRequestHandler):
                 if payload['expectedRevision'] != revision:
                     self.send_json({'error': 'conflict', 'revision': revision}, 409)
                     return
-                if state['settings'].get('autoBackup', True):
+                if payload.get('purgeHistory') is True:
+                    if state['meetings'] or state['tasks']:
+                        raise ValueError('Solo se puede purgar un espacio vacío')
+                    conn.execute('PRAGMA secure_delete=ON')
+                    conn.execute('DELETE FROM snapshots')
+                    for table in ('tasks', 'meetings'):
+                        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+                            conn.execute('DELETE FROM ' + table)
+                elif state['settings'].get('autoBackup', True):
                     conn.execute('INSERT OR REPLACE INTO snapshots VALUES(?,?,?)', (revision, previous, datetime.now(timezone.utc).isoformat()))
                     conn.execute('DELETE FROM snapshots WHERE revision NOT IN (SELECT revision FROM snapshots ORDER BY revision DESC LIMIT 10)')
                 conn.execute('UPDATE app_state SET revision=?,body=? WHERE id=1', (revision + 1, body))

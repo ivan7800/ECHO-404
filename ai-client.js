@@ -1,3 +1,4 @@
+import { askMeetings } from './notebook.js';
 import { uid, now } from './model.js';
 import { transcriptFile, transcriptFilename } from './transcript-export.js';
 
@@ -85,7 +86,7 @@ export function setupAI({ meeting, audio, blocked, apply, download, onTranscript
     buttons();
     try {
       status = await request('status');
-      $('whisperStatus').textContent = status.whisper.ready ? 'Whisper preparado · hasta 90 minutos y 128 MiB por archivo.' : 'Para activar Whisper, ejecuta el instalador incluido y reinicia ECHO-404.';
+      $('whisperStatus').textContent = status.whisper.ready ? 'Whisper preparado · hasta 3 horas y 256 MiB por archivo.' : 'Para activar Whisper, ejecuta el instalador incluido y reinicia ECHO-404.';
       $('ollamaStatus').textContent = status.ollama.models.length ? 'Genera una propuesta a partir de tus notas y transcripción.' :
         status.ollama.available ? 'Descarga un modelo local en Ollama y pulsa Comprobar motores.' : 'Inicia Ollama en este equipo para generar actas con IA.';
       let model = $('aiModel').value;
@@ -108,7 +109,9 @@ export function setupAI({ meeting, audio, blocked, apply, download, onTranscript
       const job = await request('jobs/' + encodeURIComponent(id));
       if (ticket?.id !== id) return;
       if (job.state === 'done') {
-        proposal = job.result; buttons();
+        proposal = job.result;
+        if (ticket.kind === 'transcription') proposal.transcriptAudioId = ticket.source.audioId || null;
+        buttons();
         if (ticket.autoApply) {
           if (proposal.text?.trim() && applicable()) {
             apply('transcription', proposal);
@@ -126,7 +129,7 @@ export function setupAI({ meeting, audio, blocked, apply, download, onTranscript
         if (ticket.autoApply) onTranscriptStatus('Audio guardado · transcripción fallida: ' + (job.error?.message || 'proceso cancelado'));
         clear(); message(job.error?.message || 'Proceso cancelado.'); return;
       }
-      message(job.state === 'cancelling' ? 'Cancelando…' : 'Procesando en este equipo…');
+      message(job.state === 'cancelling' ? 'Cancelando…' : Number.isFinite(job.progress) ? 'Whisper local · ' + job.progress + ' %' : 'Procesando en este equipo…');
     } catch (error) {
       if (error.status === 404) { clear(); message('La propuesta ha caducado. Puedes generarla de nuevo.'); return; }
       message('Esperando la conexión con el servidor local…');
@@ -143,14 +146,14 @@ export function setupAI({ meeting, audio, blocked, apply, download, onTranscript
       if (kind === 'transcription') {
         const blob = file || await audio(m.audioId);
         if (!blob?.size) throw Error('Selecciona un archivo o guarda una grabación en este navegador.');
-        if (blob.size > status.maxAudioBytes) throw Error('El audio supera 128 MiB.');
+        if (blob.size > status.maxAudioBytes) throw Error('El audio supera 256 MiB.');
         job = await request('transcriptions?language=' + $('aiLanguage').value, 'POST', blob, 'application/octet-stream');
       } else {
         const text = summaryText(m);
         if (!text || [...text].length > status.maxSummaryChars) throw Error('El acta admite entre 1 y 20.000 caracteres de notas y transcripción.');
         job = await request('summaries', 'POST', JSON.stringify({ text, model: $('aiModel').value }));
       }
-      ticket = { id: job.id, kind, source, title, autoApply }; remember(); message('Procesando en este equipo…'); void poll();
+      ticket = { id: job.id, kind, source, title, autoApply }; remember(); message(Number.isFinite(job.progress) ? 'Whisper local · ' + job.progress + ' %' : 'Procesando en este equipo…'); void poll();
     } catch (error) {
       message(error.message);
       if (autoApply) onTranscriptStatus('Audio guardado · transcripción no iniciada: ' + error.message);
@@ -175,6 +178,23 @@ export function setupAI({ meeting, audio, blocked, apply, download, onTranscript
       $('aiDraftTasks').replaceChildren(...proposal.tasks.map(taskDraft));
       draftLoaded = true;
     } else if (!isSummary) $('aiPreview').textContent = transcriptPreview(proposal);
+    $('actaSources').hidden = !isSummary;
+    $('actaSources').ontoggle = () => {
+      if (!isSummary || !$('actaSources').open) return;
+      $('actaMatches').replaceChildren();
+      const source = {...meeting(), ...ticket.source};
+      const draft = edited();
+      for (const claim of [draft.summary, ...draft.decisions, ...draft.tasks.map(t => t.text)].filter(Boolean)) {
+        const row = document.createElement('p'), title = document.createElement('strong');
+        title.textContent = claim;
+        row.append(title);
+        const [hit] = askMeetings([source], claim, {transcriptOnly:true, limit:1});
+        const quote = document.createElement('blockquote');
+        quote.textContent = hit ? '«' + hit.quote + '» · carácter ' + (hit.offset + 1) : 'Sin coincidencias en la transcripción.';
+        row.append(quote); $('actaMatches').append(row);
+      }
+    };
+    $('actaSources').open = false;
     $('aiApply').disabled = !applicable();
     $('aiEffect').textContent = ticket.kind === 'transcription' && !proposal.text.trim() ? 'Whisper no detectó voz. Se conserva tu transcripción.' :
       $('aiApply').disabled ? 'Para aplicar, abre la reunión de origen con su contenido original y termina cualquier grabación. Puedes descargar la propuesta.' :

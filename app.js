@@ -1,5 +1,8 @@
+import { taskCalendar } from './calendar.js';
+import { prepareCapture } from './capture.js';
 import { VERSION, uid, now, newMeeting, normalizeState, emptyState, meetingMarkdown, extractActions } from './model.js';
-import { Store, audioRecord } from './storage.js';
+import { initNotebook } from './notebook.js';
+import { Store, audioRecord, beginRecording, appendRecordingChunk, finalizeRecordingDraft, listRecordingDrafts, discardRecordingDraft, exportFullBackup } from './storage.js';
 import { setupAI, mergeActions } from './ai-client.js';
 import { transcriptFile, transcriptFilename } from './transcript-export.js';
 
@@ -7,8 +10,6 @@ const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let toastTimer, draftTimer, current = newMeeting(), taskEditing = null, taskMeetingId = null;
 let recording = null, recognition = null, stopping = false, speechPrefix = '', ready = false;
-const MAX_RECORD_SECONDS = 90 * 60;
-const MAX_RECORD_BYTES = 128 * 1024 * 1024;
 function microphoneMessage(error) {
   switch (error?.name) {
     case 'NotAllowedError': case 'PermissionDeniedError': case 'SecurityError':
@@ -28,7 +29,7 @@ function audioStatus(message, isError = false) {
   if (isError) toast(message);
 }
 const labels = { high: 'Alta', normal: 'Normal', low: 'Baja', todo: 'Pendiente', doing: 'En curso', done: 'Completada' };
-let store, updateAI;
+let store, updateAI, notebook, opening = false;
 store = new Store((text, warning) => {
   $('saveState').textContent = text; $('saveState').classList.toggle('high', !!warning);
   $('conflict').classList.toggle('hidden', !store?.conflict);
@@ -54,7 +55,7 @@ function persist(showToast = false) {
   if (!ready) return;
   clearTimeout(draftTimer); collect();
   const content = [current.notes, current.transcript, current.summary, current.decisions, current.project].some(t => t.trim());
-  if (!content && !current.tags.length && !current.audioId && current.title === 'Nueva reunión' && !store.state.meetings.some(m => m.id === current.id)) return;
+  if (!recording && !content && !current.tags.length && !current.audioId && current.title === 'Nueva reunión' && !store.state.meetings.some(m => m.id === current.id)) return;
   current.updatedAt = now();
   const index = store.state.meetings.findIndex(m => m.id === current.id);
   if (index < 0) store.state.meetings.push(structuredClone(current)); else store.state.meetings[index] = structuredClone(current);
@@ -70,6 +71,7 @@ function renderEditor() {
   $('timer').textContent = formatTime(current.duration); audioStatus(current.audioId ? 'Audio disponible en este navegador' : 'Listo para grabar');
   $('downloadAudio').classList.toggle('hidden', !current.audioId); $('speechState').textContent = '';
   void renderAudioLibrary();
+  notebook?.refresh();
   renderMeetingTasks();
   updateAI?.();
 }
@@ -79,6 +81,10 @@ function formatTime(seconds = 0) {
 function audioExtension(type) {
   if (type.includes('mp4')) return '.m4a';
   if (type.includes('ogg')) return '.ogg';
+  if (type.includes('mpeg')) return '.mp3';
+  if (type.includes('wav')) return '.wav';
+  if (type.includes('flac')) return '.flac';
+  if (type.includes('aac')) return '.aac';
   return '.webm';
 }
 function show(view) {
@@ -144,9 +150,19 @@ function organize() {
   if (!current.summary.trim()) { current.summary = text.slice(0, 800); $('summary').value = current.summary; }
   persist(); renderLists(); toast(added + ' acciones detectadas. Resumen por extracción; revisa el contenido.');
 }
-function exportMeeting() {
+async function exportMeeting() {
   persist(); const tasks = store.state.tasks.filter(t => t.meetingId === current.id), type = $('exportFormat').value;
   let content = meetingMarkdown(current, store.state.tasks), mime = 'text/markdown';
+  if (type === 'ics') {
+    try { download(new Blob([taskCalendar(current,tasks)], {type:'text/calendar;charset=utf-8'}), filename() + '.ics'); }
+    catch (error) { toast(error.message); }
+    return;
+  }
+  if (type === 'docx' || type === 'txt') {
+    try { download(await transcriptFile(content, current.title, type), filename() + '.' + type); }
+    catch (error) { toast(error.message); }
+    return;
+  }
   if (type === 'json') { content = JSON.stringify({ schema: 'echo-404-meeting-v2', meeting: current, tasks }, null, 2); mime = 'application/json'; }
   if (type === 'html') { content = '<!doctype html><html lang="es"><meta charset="utf-8"><title>' + esc(current.title) + '</title><body><h1>' + esc(current.title) + '</h1><pre>' + esc(content) + '</pre></body></html>'; mime = 'text/html'; }
   download(new Blob([content], { type: mime + ';charset=utf-8' }), filename() + '.' + type);
@@ -184,8 +200,23 @@ function startSpeech() {
   sr.onend = () => { if (recording && !stopping && recognition === sr) { speechPrefix = $('transcript').value; try { sr.start(); } catch {} } };
   try { sr.start(); } catch { $('speechState').textContent = 'No se pudo iniciar el reconocimiento. El audio sigue activo.'; }
 }
-async function toggleRecording(source = 'microphone') {
-  if (stopping) return;
+function elapsed(session) {
+  return Math.max(0, Math.floor(((session.pausedAt ?? performance.now()) - session.started - session.pausedMs) / 1000));
+}
+async function lockCapture() {
+  if (!navigator.locks) throw Object.assign(Error('Este navegador necesita Web Locks para proteger las tomas. Abre la aplicación en un navegador actualizado y HTTPS.'), {name: 'CaptureBusy'});
+  let acquired;
+  const ready = new Promise(resolve => { acquired = resolve; });
+  const request = navigator.locks.request('echo404-audio-operation', {ifAvailable: true}, lock => {
+    if (!lock) { acquired(null); return; }
+    return new Promise(resolve => acquired(resolve));
+  });
+  const release = await Promise.race([ready, request]);
+  if (!release) throw Object.assign(Error('Hay otra operación de audio en curso. Detén la otra pestaña y reintenta.'), {name: 'CaptureBusy'});
+  return release;
+}
+async function toggleRecording(source = 'microphone', prepared = null) {
+  if (stopping || opening) return;
   if (recording) {
     stopping = true; $('record').disabled = true; $('status').textContent = 'Guardando audio';
     stopSpeech();
@@ -205,71 +236,79 @@ async function toggleRecording(source = 'microphone') {
       $('transcriptTab').click();
     }
   }
-  $('record').disabled = true; $('recordTab').disabled = true; let stream, displayStream;
+  opening = true;
+  $('record').disabled = true; $('recordTab').disabled = true;
+  let stream, displayStream, release, draftId;
   try {
     audioStatus(source === 'display' ? 'Elige una pestaña y activa «Compartir audio»…' : 'Solicitando permiso de micrófono…');
-    if (source === 'display') {
+    if (prepared) stream = prepared.stream;
+    else if (source === 'display') {
       displayStream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
       if (!displayStream.getAudioTracks().length) throw Object.assign(Error('Sin audio compartido'), { name: 'NoDisplayAudio' });
       stream = new MediaStream(displayStream.getAudioTracks());
     } else stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    release = await lockCapture();
     collect();
     const mimeType = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].find(type => MediaRecorder.isTypeSupported?.(type));
     const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-    const session = { recorder, stream, displayStream, chunks: [], bytes: 0, meetingId: current.id, started: performance.now(), timer: null };
+    draftId = await beginRecording(current.id, recorder.mimeType, source);
+    const session = { id: draftId, release, seq: 0, writes: Promise.resolve(), recorder, prepared, source, pausedAt: null, pausedMs: 0, stream, displayStream, bytes: 0, meetingId: current.id, started: performance.now(), timer: null };
     recording = session;
     recorder.ondataavailable = event => {
       if (!event.data.size) return;
-      session.chunks.push(event.data);
+      const seq = session.seq++;
+      const duration = elapsed(session);
       session.bytes += event.data.size;
-      if (session.bytes >= MAX_RECORD_BYTES && !stopping) {
-        toast('Se alcanzó el límite de 128 MiB. Guardando la grabación.');
-        void toggleRecording();
-      }
+      session.writes = session.writes.then(async () => {
+        if (session.writeError) return;
+        try { await appendRecordingChunk(session.id, seq, event.data, duration); }
+        catch (error) {
+          session.writeError = error;
+          if (!stopping && recording === session) void toggleRecording();
+        }
+      });
     };
     recorder.onerror = event => { audioStatus('Error de grabación. Intentando conservar el audio disponible.', true); if (recorder.state !== 'inactive') recorder.stop(); else finalizeRecording(session); };
     recorder.onstop = () => finalizeRecording(session);
-    for (const track of stream.getAudioTracks()) track.addEventListener('ended', () => {
+    for (const track of [...stream.getAudioTracks(), ...(prepared?.streams.flatMap(input => input.stream.getTracks()) || [])]) track.addEventListener('ended', () => {
       if (recording === session && !stopping) {
         toast('El micrófono se desconectó. Guardando el audio recibido.');
         void toggleRecording();
       }
     });
     for (const track of displayStream?.getVideoTracks() || []) track.addEventListener('ended', () => { if (recording === session && !stopping) void toggleRecording(); });
-    recorder.start(5000); $('record').textContent = 'Detener'; $('recordDot').classList.add('live'); $('recordDot').closest('.recbar').classList.add('recording'); $('status').textContent = 'Grabando';
-    audioStatus(source === 'display' ? 'Audio de pestaña activo · grabando' : 'Micrófono activo · grabando'); $('newMeeting').disabled = true;
+    recorder.start(5000); $('pauseCapture').hidden = false; if (prepared) showLevels(prepared, $('liveLevels')); $('record').textContent = 'Detener'; $('recordDot').classList.add('live'); $('recordDot').closest('.recbar').classList.add('recording'); $('status').textContent = 'Grabando';
+    audioStatus(source === 'mixed' ? 'Micrófono y pestaña activos · grabando' : source === 'display' ? 'Audio de pestaña activo · grabando' : 'Micrófono activo · grabando'); $('newMeeting').disabled = true;
     session.timer = setInterval(() => {
-      current.duration = Math.floor((performance.now() - session.started) / 1000);
+      current.duration = Math.floor(((session.pausedAt ?? performance.now()) - session.started - session.pausedMs) / 1000);
       $('timer').textContent = formatTime(current.duration);
-      if (current.duration >= MAX_RECORD_SECONDS && !stopping) {
-        toast('Se alcanzaron 90 minutos. Guardando la grabación.');
-        void toggleRecording();
-      }
+
     }, 250);
     persist();
-    if (source === 'display') { $('transcriptTab').click(); $('speechState').textContent = 'El audio de la pestaña se transcribe al detener con Whisper local. El dictado del navegador solo escucha el micrófono.'; }
+    if (source !== 'microphone') { $('transcriptTab').click(); $('speechState').textContent = 'El audio de la pestaña se transcribe al detener con Whisper local. El dictado del navegador solo escucha el micrófono.'; }
     else startSpeech();
   } catch (error) {
-    stream?.getTracks().forEach(track => track.stop()); displayStream?.getTracks().forEach(track => track.stop()); recording = null;
-    audioStatus(error.name === 'NoDisplayAudio' ? 'No se compartió audio. Selecciona una pestaña y marca «Compartir audio».' : microphoneMessage(error), true);
-  } finally { $('record').disabled = false; if (!recording) $('recordTab').disabled = false; }
+    release?.(); if (draftId) await discardRecordingDraft(draftId).catch(() => {});
+    prepared?.close(); stream?.getTracks().forEach(track => track.stop()); displayStream?.getTracks().forEach(track => track.stop()); recording = null;
+    audioStatus(error.name === 'NoDisplayAudio' ? 'No se compartió audio. Selecciona una pestaña y marca «Compartir audio».' : error.name === 'CaptureBusy' || error.name === 'QuotaExceededError' ? error.message : microphoneMessage(error), true);
+  } finally { opening = false; $('record').disabled = false; if (!recording) $('recordTab').disabled = false; }
 }
 async function finalizeRecording(session) {
   if (session.finalizing) return; session.finalizing = true; stopping = true;
-  clearInterval(session.timer); stopSpeech(); session.stream.getTracks().forEach(t => t.stop()); session.displayStream?.getTracks().forEach(t => t.stop());
-  const blob = new Blob(session.chunks, { type: session.recorder.mimeType || 'audio/webm' });
+  clearInterval(session.timer); clearInterval(levelTimer); $('liveLevels').replaceChildren(); $('pauseCapture').hidden = true; $('pauseCapture').textContent = 'Pausar'; session.prepared?.close(); stopSpeech(); session.stream.getTracks().forEach(t => t.stop()); session.displayStream?.getTracks().forEach(t => t.stop());
   let recordingSaved = false;
   try {
-    if (!blob.size) throw Error('No se recibió audio');
-    const audioId = uid(); await audioRecord('put', { id: audioId, meetingId: session.meetingId, blob, createdAt: Date.now() });
+    await session.writes;
+    if (session.writeError) throw session.writeError;
+    const record = await finalizeRecordingDraft(session.id);
     recordingSaved = true;
-    current.audioId = audioId; current.duration = Math.floor((performance.now() - session.started) / 1000);
+    current.audioId = record.id; current.duration = record.duration;
     $('downloadAudio').classList.remove('hidden'); $('audioState').textContent = 'Audio guardado en este navegador'; toast('Grabación guardada');
     void renderAudioLibrary();
   } catch (error) {
-    toast('No se pudo guardar audio. Se descargará una copia si hay datos.');
-    if (blob.size) download(blob, filename() + audioExtension(blob.type));
+    audioStatus('Guardado interrumpido. Revisa el espacio y pulsa Recuperar tomas para conservar los fragmentos escritos.', true);
   } finally {
+    session.release();
     recording = null; stopping = false; $('record').disabled = false; $('record').textContent = 'Grabar otra toma';
     $('newMeeting').disabled = false; $('recordTab').disabled = false; $('recordDot').classList.remove('live'); $('recordDot').closest('.recbar').classList.remove('recording'); persist();
     updateAI?.();
@@ -286,7 +325,7 @@ async function renderAudioLibrary() {
     const heading = document.createElement('p'); heading.textContent = 'Tomas guardadas en este navegador'; container.append(heading);
     for (const item of recordings) {
       const button = document.createElement('button');
-      button.type = 'button'; button.textContent = 'Descargar · ' + new Date(item.createdAt).toLocaleString('es-ES') + ' · ' + (item.blob.size / 1048576).toFixed(1) + ' MiB';
+      button.type = 'button'; button.textContent = 'Descargar · ' + (item.source ? ({microphone:'Micrófono',display:'Pestaña',mixed:'Mezcla'}[item.source] || 'Audio') + ' · ' : '') + formatTime(item.duration || 0) + ' · ' + new Date(item.createdAt).toLocaleString('es-ES') + ' · ' + (item.blob.size / 1048576).toFixed(1) + ' MiB';
       button.onclick = () => download(item.blob, filename() + '-' + item.id.slice(0, 8) + audioExtension(item.blob.type));
       container.append(button);
     }
@@ -311,7 +350,7 @@ document.querySelectorAll('[data-view]').forEach(button => button.onclick = () =
 document.addEventListener('click', event => {
   const open = event.target.closest('[data-open]');
   if (open) {
-    if (recording || stopping) { toast('Detén la grabación antes de cambiar de reunión'); return; }
+    if (opening || recording || stopping) { toast('Detén la grabación antes de cambiar de reunión'); return; }
     persist(); current = structuredClone(store.state.meetings.find(m => m.id === open.dataset.open)); renderEditor(); show('dashboard');
   }
   const edit = event.target.closest('[data-edit-task]'); if (edit) openTask(edit.dataset.editTask);
@@ -325,12 +364,63 @@ for (const id of ['meetingTitle', 'notes', 'transcript', 'summary', 'decisions',
   clearTimeout(draftTimer); draftTimer = setTimeout(() => persist(), 550); $('status').textContent = 'Edición en curso';
 });
 for (const id of ['search', 'projectFilter', 'tagFilter', 'taskSearch', 'taskStatus', 'taskPriority']) $(id).addEventListener(id.includes('Filter') || ['taskStatus', 'taskPriority'].includes(id) ? 'change' : 'input', renderLists);
-$('newMeeting').onclick = () => { if (recording || stopping) return; persist(); current = newMeeting(); renderEditor(); show('dashboard'); };
+$('newMeeting').onclick = () => { if (opening || recording || stopping) return; persist(); current = newMeeting(); renderEditor(); show('dashboard'); };
 $('saveMeeting').onclick = () => persist(true); $('summarize').onclick = organize; $('export').onclick = exportMeeting;
 $('addMeetingTask').onclick = () => { persist(); if (!store.state.meetings.some(m => m.id === current.id)) { current.title = 'Reunión sin título'; $('meetingTitle').value = current.title; persist(); } openTask(null, current.id); };
 $('addTask').onclick = () => openTask(); $('taskForm').onsubmit = saveTask;
 for (const id of ['closeTask', 'cancelTask']) $(id).onclick = () => $('taskDialog').close();
 $('deleteTask').onclick = () => { if (confirm('¿Eliminar esta tarea?')) { store.state.tasks = store.state.tasks.filter(t => t.id !== taskEditing); store.save(); renderLists(); $('taskDialog').close(); } };
+let preparedCapture = null, preparation = 0, levelTimer;
+function showLevels(capture, container) {
+  clearInterval(levelTimer);
+  container.replaceChildren();
+  const meters = capture.levels.map(level => {
+    const label = document.createElement('label'), meter = document.createElement('meter');
+    meter.max = 1; label.append(level.label + ' ', meter); container.append(label);
+    return () => { meter.value = level.read(); };
+  });
+  levelTimer = setInterval(() => meters.forEach(update => update()), 100);
+}
+$('prepareCapture').onclick = async () => {
+  if (opening || recording || stopping) return;
+  const serial = ++preparation;
+  $('captureDialog').showModal(); $('startPrepared').disabled = true;
+  $('prepareState').textContent = 'Autoriza las fuentes para ver sus niveles.';
+  try {
+    const capture = await prepareCapture($('captureMode').value);
+    if (serial !== preparation) { capture.close(); return; }
+    preparedCapture = capture;
+    showLevels(capture, $('prepareLevels'));
+    $('prepareState').textContent = 'Habla y reproduce sonido en la pestaña seleccionada. Comprueba los niveles antes de grabar.';
+    $('startPrepared').disabled = false;
+  } catch (error) {
+    if (serial === preparation) $('prepareState').textContent = error.name === 'NotAllowedError' ? 'Permiso denegado. Revisa los permisos y vuelve a elegir las fuentes.' : error.message;
+  }
+};
+$('cancelPrepared').onclick = () => $('captureDialog').close();
+$('captureDialog').onclose = () => {
+  preparation++; preparedCapture?.close(); preparedCapture = null;
+  if (!recording) clearInterval(levelTimer);
+  $('prepareLevels').replaceChildren();
+};
+$('startPrepared').onclick = () => {
+  const capture = preparedCapture;
+  if (!capture) return;
+  preparedCapture = null; $('captureDialog').close();
+  void toggleRecording(capture.mode, capture);
+};
+$('pauseCapture').onclick = () => {
+  const session = recording;
+  if (!session || stopping) return;
+  if (session.recorder.state === 'recording') {
+    session.recorder.pause(); session.pausedAt = performance.now(); stopSpeech();
+    $('pauseCapture').textContent = 'Reanudar'; audioStatus('Grabación en pausa');
+  } else if (session.recorder.state === 'paused') {
+    session.recorder.resume(); session.pausedMs += performance.now() - session.pausedAt;
+    session.pausedAt = null; $('pauseCapture').textContent = 'Pausar'; audioStatus('Grabación activa');
+    if (session.source === 'microphone') startSpeech();
+  }
+};
 $('record').onclick = () => toggleRecording(); $('recordTab').onclick = () => toggleRecording('display'); $('downloadAudio').onclick = downloadAudio;
 $('downloadTranscript').onclick = async () => {
   const text = $('transcript').value, format = $('transcriptFormat').value;
@@ -346,23 +436,93 @@ $('language').onchange = () => { store.state.settings.language = $('language').v
 $('autoBackup').onchange = () => { store.state.settings.autoBackup = $('autoBackup').checked; store.save(); };
 $('speechEnabled').onchange = () => { store.state.settings.speechEnabled = $('speechEnabled').checked; store.save(); if (!$('speechEnabled').checked) stopSpeech(); };
 $('themeToggle').onclick = () => applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+async function exclusiveAudio(action) {
+  let release;
+  try { release = await lockCapture(); await action(); }
+  catch (error) { toast(error.message); }
+  finally { release?.(); }
+}
+$('recoverTakes').onclick = () => exclusiveAudio(async () => {
+  const drafts = await listRecordingDrafts();
+  if (!drafts.length) { toast('No hay tomas interrumpidas'); return; }
+  for (const draft of drafts) {
+    if (!draft.count) { await discardRecordingDraft(draft.id); continue; }
+    const take = await finalizeRecordingDraft(draft.id, 'recuperada');
+    let target = store.state.meetings.find(m => m.id === take.meetingId);
+    if (!target) {
+      target = {...newMeeting(), id:take.meetingId, title:'Reunión recuperada'};
+      store.state.meetings.push(target);
+    }
+    target.audioId = take.id; target.duration = take.duration;
+    if (current.id === target.id) { current.audioId = take.id; current.duration = take.duration; }
+    store.save();
+  }
+  renderEditor(); renderLists(); toast('Recuperación terminada. Consulta las tomas en la reunión.');
+});
+$('importTake').onchange = event => {
+  const file = event.target.files[0]; event.target.value = '';
+  if (!file) return;
+  void exclusiveAudio(async () => {
+    if (!file.size || file.size > 256 * 1024 * 1024) throw Error('Elige un archivo de audio de hasta 256 MiB.');
+    const target = current, id = uid(), probe = document.createElement('audio');
+    const url = URL.createObjectURL(file);
+    try {
+      const duration = await new Promise((resolve,reject) => {
+        const fail = () => { clearTimeout(timer); reject(Error('El navegador no pudo leer la pista de audio. Prueba WAV, MP3 o M4A.')); };
+        const timer = setTimeout(fail,10000);
+        probe.onloadedmetadata = () => { clearTimeout(timer); resolve(Number.isFinite(probe.duration) ? probe.duration : 0); };
+        probe.onerror = fail; probe.src = url;
+      });
+      if (target !== current) throw Error('La reunión cambió. Selecciona otra vez el archivo.');
+      await audioRecord('put', {id, meetingId:target.id, source:'archivo', size:file.size, duration, status:'guardada', createdAt:Date.now(), blob:file});
+      target.audioId = id; target.duration = Math.floor(duration);
+      if (target === current) { persist(); renderEditor(); void updateAI?.transcribeSaved(); }
+      else { const saved = store.state.meetings.find(m => m.id === target.id); if (saved) { saved.audioId = id; store.save(); } }
+    } finally { probe.removeAttribute('src'); probe.load(); URL.revokeObjectURL(url); }
+  });
+};
+$('fullExport').onclick = () => exclusiveAudio(async () => {
+  persist(); download(await exportFullBackup(store.state), 'echo-404-completa.echo');
+});
+$('fullRestore').onchange = event => {
+  const file = event.target.files[0]; event.target.value = '';
+  if (!file || !confirm('¿Reemplazar reuniones, tareas y audio con esta copia completa?')) return;
+  void exclusiveAudio(async () => {
+    clearTimeout(draftTimer); await store.restoreFullBackup(file);
+    current = structuredClone(store.state.meetings.at(-1) || newMeeting());
+    renderEditor(); renderLists(); renderSettings(); toast('Copia completa restaurada');
+  });
+};
 $('backupExport').onclick = exportBackup; $('conflictExport').onclick = exportBackup;
-$('backupImportButton').onclick = () => { if (recording) { toast('Detén la grabación antes de importar'); return; } $('backupImport').click(); };
+$('backupImportButton').onclick = () => { if (opening || recording || stopping) { toast('Detén la grabación antes de importar'); return; } $('backupImport').click(); };
 $('backupImport').onchange = async event => {
   const file = event.target.files[0]; if (!file) return;
   try { if (file.size > 8 * 1024 * 1024) throw Error('La copia supera 8 MiB'); applyImported(JSON.parse(await file.text())); }
   catch (error) { toast(error.message || 'Copia no válida'); } finally { event.target.value = ''; }
 };
 $('restoreBackup').onclick = () => {
-  if (recording) { toast('Detén la grabación antes de restaurar'); return; }
+  if (opening || recording || stopping) { toast('Detén la grabación antes de restaurar'); return; }
   try { const backup = JSON.parse(localStorage.getItem('echo404-last-backup') || 'null'); if (!backup) throw Error('Aún no hay copia local'); applyImported(backup); } catch (error) { toast(error.message); }
 };
 $('clearData').onclick = async () => {
-  if (recording) { toast('Detén la grabación antes de vaciar'); return; }
+  if (opening || recording || stopping) { toast('Detén la grabación antes de vaciar'); return; }
   if (!confirm('¿Vaciar reuniones, tareas y audio de este espacio? Descarga una copia antes de continuar.')) return;
-  try { await audioRecord('clear'); } catch { toast('No se pudo borrar audio: revisa los permisos del navegador'); return; }
-  for (const key of ['echo404-data', 'echo404-last-backup', 'echo404-before-conflict']) localStorage.removeItem(key);
-  store.state = emptyState(); store.save(); current = newMeeting(); renderEditor(); renderSettings(); renderLists(); toast('Espacio vaciado');
+  await exclusiveAudio(async () => {
+    if (store.conflict || store.busy || (store.revision !== null && !store.connected)) throw Error('Reconecta SQLite y resuelve los conflictos antes de vaciar.');
+    const blank = emptyState();
+    if (store.connected) {
+      const response = await fetch('/api/state', {method:'PUT', headers:{'Content-Type':'application/json','X-Echo-Client':'echo-404'},
+        body:JSON.stringify({expectedRevision:store.revision,state:blank,purgeHistory:true})});
+      if (!response.ok) throw Error('SQLite no confirmó el borrado. Comprueba la conexión y la revisión.');
+      store.revision = (await response.json()).revision;
+    }
+    clearTimeout(draftTimer); clearTimeout(store.timer);
+    store.state = blank; store.pending = false; store.cache(); current = newMeeting();
+    renderEditor(); renderSettings(); renderLists();
+    for (const key of ['echo404-data','echo404-last-backup','echo404-before-conflict','echo404-current']) localStorage.removeItem(key);
+    sessionStorage.removeItem('echo404-ai-ticket-1');
+    await audioRecord('clear'); toast('Espacio vaciado');
+  });
 };
 async function reconnect() {
   if (store.busy) { toast('Espera a que termine el guardado'); return; }
@@ -370,11 +530,11 @@ async function reconnect() {
 }
 $('retrySync').onclick = reconnect;
 $('conflictReload').onclick = async () => {
-  if (recording) { toast('Detén la grabación antes de cargar otros datos'); return; }
+  if (opening || recording || stopping) { toast('Detén la grabación antes de cargar otros datos'); return; }
   try { clearTimeout(draftTimer); await store.useServer(); current = newMeeting(); renderEditor(); renderLists(); renderSettings(); }
   catch (error) { toast(error.message); }
 };
-window.addEventListener('beforeunload', event => { persist(); store.backup(); if (recording || stopping) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { persist(); store.backup(); if (opening || recording || stopping) { event.preventDefault(); event.returnValue = ''; } });
 window.addEventListener('online', reconnect);
 setInterval(() => store.backup(), 60000);
 
@@ -386,6 +546,7 @@ async function boot() {
   ready = true; renderEditor(); renderSettings(); renderLists(); applyTheme(document.documentElement.dataset.theme);
   if (store.recovered) toast('Se ha recuperado la última copia local válida');
   document.querySelectorAll('main button, main input, main textarea, main select').forEach(n => { n.disabled = false; });
+  notebook = initNotebook({meeting: collect, meetings: () => store.state.meetings, audio: async id => (await audioRecord('get', id))?.blob});
   updateAI = setupAI({
     meeting: collect,
     blocked: () => !!recording || stopping || store.conflict,
@@ -395,7 +556,10 @@ async function boot() {
     apply(kind, proposal) {
       collect();
       if (kind === 'transcription') {
+        current.segments = proposal.segments || [];
+        current.transcriptAudioId = proposal.transcriptAudioId || null;
         $('transcript').value = proposal.text;
+        collect(); notebook.refresh();
         $('transcriptTab').click();
       } else {
         $('summary').value = proposal.summary;

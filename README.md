@@ -1,4 +1,4 @@
-# ECHO-404 · 1.6.4 RC1
+# ECHO-404 · 1.7.0 RC1
 
 Espacio personal para reuniones, notas, decisiones y tareas. La interfaz Command Center coloca la grabación, las notas y los acuerdos en un mismo espacio de trabajo. Incluye temas claro y oscuro. Python guarda el texto en SQLite. Si instalas los motores opcionales, puedes transcribir audio con Whisper y proponer un acta con Ollama en tu equipo.
 
@@ -29,7 +29,7 @@ Si el puerto está ocupado, cierra el servidor anterior o ejecuta `python3 serve
 - Biblioteca con búsqueda en todo el contenido, proyecto y etiquetas.
 - Exportación por reunión en Markdown, JSON y HTML; incluye decisiones y tareas.
 - Grabación de micrófono con `MediaRecorder`; última toma asociada a la reunión y conservada en IndexedDB. Descargar el audio antes de limpiar el navegador.
-- Cada toma se detiene automáticamente a los 90 minutos o al alcanzar 128 MiB. La capacidad real depende del almacenamiento disponible en el navegador. El proceso de transcripción dispone de 15 minutos de cómputo, por lo que un audio largo puede agotar ese tiempo antes de producir el texto.
+- La grabación escribe fragmentos en IndexedDB aproximadamente cada cinco segundos. Ajustes → Recuperar tomas interrumpidas conserva los fragmentos que alcanzaron el disco. El espacio disponible y las políticas de suspensión del dispositivo limitan la duración.
 - Reconocimiento de voz opcional del navegador, desactivado inicialmente. Puede necesitar Internet y enviar voz al proveedor del navegador. No equivale a Whisper local.
 - «Organizar notas» propone acciones por palabras clave y un extracto editable. No usa un modelo de IA ni asigna automáticamente responsables.
 - Copias JSON de texto y tareas, importación validada de formatos anteriores y recuperación de última copia local. Las copias JSON no incluyen audio.
@@ -44,9 +44,9 @@ Abre `https://ivan7800.github.io/ECHO-404/` en Chrome, Edge o Firefox, conecta u
 ### Windows 11 y Linux Mint
 
 1. Descarga el ZIP generado por `python3 scripts/package.py`, extráelo completo y abre el lanzador correspondiente. El navegador abrirá `http://127.0.0.1:4173/`.
-2. Para una reunión presencial, pulsa **Iniciar grabación** y concede acceso al micrófono. Para Meet o Teams web en Chrome/Edge, pulsa **Grabar audio de pestaña**, elige la pestaña de la llamada y activa **Compartir audio**. Esta fuente graba el audio compartido; si también necesitas el micrófono local, usa una mezcla de audio externa o realiza otra toma.
+2. En **Preparar audio y comprobar niveles**, selecciona **Micrófono y pestaña** si necesitas ambos lados de una llamada web. Selecciona la pestaña, activa **Compartir audio**, concede permiso al micrófono y comprueba ambos medidores. Pulsa **Grabar reunión**. Durante una pausa puedes seguir tomando notas.
 3. Pulsa **Detener**, espera a que aparezca la toma en **Tomas guardadas** y descarga una copia. La última toma se transcribe automáticamente solo si Whisper está instalado y el servidor local está abierto. Usa **Asistente local** para revisar la propuesta y generar el acta con Ollama si lo instalaste.
-4. Exporta copia JSON y descarga las tomas por separado. El JSON no contiene audio. No cambies el puerto ni el perfil del navegador si quieres volver a encontrar las tomas.
+4. Consulta la transcripción y el cuaderno, revisa el acta y exporta. **Ajustes → Descargar copia con audio** crea un archivo .echo que puedes restaurar en otro perfil o equipo. El JSON antiguo contiene solo texto y tareas.
 
 ### iPhone, iPad y Android
 
@@ -54,7 +54,7 @@ Abre GitHub Pages en el navegador y concede acceso al micrófono. La transcripci
 
 ### Límites verificados
 
-La prueba automatizada usa un micrófono y un reconocimiento simulados. El límite de 90 minutos es una parada de seguridad, no una duración garantizada. Una llamada real en Windows, Linux Mint, Safari y Android requiere prueba física; la captura de pestaña depende del navegador y de la opción **Compartir audio**. ECHO-404 no sincroniza dispositivos, identifica hablantes ni integra calendarios.
+La matriz de navegadores usa equipos virtuales y audio simulado. Consulta RELEASE-CANDIDATE.md para las medidas de recuperación y las pruebas con modelos reales.
 
 ## Dónde se guardan los datos
 
@@ -91,4 +91,4 @@ Consulta `RELEASE-CANDIDATE.md` para los resultados y límites de esta versión 
 
 ## Pendientes de producto
 
-Para una llamada por Teams o Meet, ECHO-404 admite archivos de audio que ya tengas y graba el micrófono seleccionado por el navegador. La captura directa del audio del sistema y la identificación de hablantes quedan pendientes. El almacenamiento y las tareas pertenecen a un único equipo. La distribución usa lanzadores y requiere Python.
+Para llamadas de escritorio, la captura actual admite las fuentes que ofrece el navegador. La captura general de otras aplicaciones requiere una entrada de monitor del sistema o un capturador nativo. En móvil, puedes importar un archivo de la grabadora del dispositivo. Las copias .echo permiten traslado manual. El calendario admite exportación ICS de tareas con fecha. La sincronización automática y el etiquetado automático de voces siguen pendientes.

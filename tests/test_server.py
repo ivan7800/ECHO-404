@@ -47,6 +47,17 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.call('/api/state', {'expectedRevision': 0, 'state': state})[0], 409)
         self.assertEqual(self.call('/api/state')[1]['revision'], 1)
 
+    def test_purge_removes_snapshots_only_at_matching_revision(self):
+        state = empty_state()
+        self.assertEqual(self.call('/api/state', {'expectedRevision': 0, 'state': state})[0], 200)
+        payload = {'expectedRevision': 0, 'state': state, 'purgeHistory': True}
+        self.assertEqual(self.call('/api/state', payload)[0], 409)
+        with sqlite3.connect(self.server.db_path) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM snapshots').fetchone()[0], 1)
+            payload['expectedRevision'] = 1
+            self.assertEqual(self.call('/api/state', payload)[0], 200)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM snapshots').fetchone()[0], 0)
+
     def test_rejects_malformed_rows_and_preserves_data(self):
         broken = empty_state(); broken['meetings'] = [None]
         self.assertEqual(self.call('/api/state', {'expectedRevision': 0, 'state': broken})[0], 400)

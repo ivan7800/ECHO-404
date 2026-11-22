@@ -12,7 +12,7 @@ from pathlib import Path
 from local_ai import AIError, local_models, model_ready
 
 ROOT = Path(__file__).resolve().parent
-MAX_AUDIO = 128 * 1024 * 1024
+MAX_AUDIO = 256 * 1024 * 1024
 
 
 class AIJobs:
@@ -72,7 +72,7 @@ class AIJobs:
             folder = Path(directory.name)
             if kind == 'transcription':
                 if not 0 < audio_size <= MAX_AUDIO:
-                    raise AIError('audio_limit', 'El audio debe ocupar entre 1 byte y 128 MiB.')
+                    raise AIError('audio_limit', 'El audio debe ocupar entre 1 byte y 256 MiB.')
                 with (folder / 'audio').open('wb') as output:
                     remaining = audio_size
                     while remaining:
@@ -111,7 +111,16 @@ class AIJobs:
                 process = subprocess.Popen([self.python, str(self.worker), str(folder)], cwd=ROOT, env=environment,
                                            stdin=subprocess.DEVNULL, stdout=log, stderr=log)
                 start = time.monotonic()
+                last_stamp = None
                 while process.poll() is None:
+                    progress = folder / 'progress'
+                    if progress.is_file():
+                        stamp = progress.stat().st_mtime_ns
+                        if stamp != last_stamp:
+                            with self.lock:
+                                job['progress'] = int(progress.read_text(encoding='ascii'))
+                            last_stamp = stamp
+                            start = time.monotonic()
                     if job['cancel'].is_set() or time.monotonic() - start > self.timeout:
                         process.terminate()
                         try:
@@ -120,7 +129,7 @@ class AIJobs:
                             process.kill(); process.wait(timeout=3)
                         if job['cancel'].is_set():
                             return
-                        raise AIError('timeout', 'El proceso local superó el tiempo máximo de 15 minutos.')
+                        raise AIError('timeout', 'El proceso local superó el tiempo máximo sin avance.')
                     time.sleep(0.1)
             output = folder / 'output.json'
             if process.returncode or not output.is_file() or output.stat().st_size > 4 * 1024 * 1024:
@@ -153,7 +162,7 @@ class AIJobs:
             job = self.jobs.get(job_id)
             if not job:
                 return None
-            return {key: job[key] for key in ['id', 'kind', 'state', 'createdAt', 'result', 'error'] if key in job}
+            return {key: job[key] for key in ['id', 'kind', 'state', 'createdAt', 'result', 'error', 'progress'] if key in job}
 
     def cancel(self, job_id):
         with self.lock:
