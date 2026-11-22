@@ -145,9 +145,14 @@ function organize() {
   if (!current.summary.trim()) { current.summary = text.slice(0, 800); $('summary').value = current.summary; }
   persist(); renderLists(); toast(added + ' acciones detectadas. Resumen por extracción; revisa el contenido.');
 }
-function exportMeeting() {
+async function exportMeeting() {
   persist(); const tasks = store.state.tasks.filter(t => t.meetingId === current.id), type = $('exportFormat').value;
   let content = meetingMarkdown(current, store.state.tasks), mime = 'text/markdown';
+  if (type === 'docx' || type === 'txt') {
+    try { download(await transcriptFile(content, current.title, type), filename() + '.' + type); }
+    catch (error) { toast(error.message); }
+    return;
+  }
   if (type === 'json') { content = JSON.stringify({ schema: 'echo-404-meeting-v2', meeting: current, tasks }, null, 2); mime = 'application/json'; }
   if (type === 'html') { content = '<!doctype html><html lang="es"><meta charset="utf-8"><title>' + esc(current.title) + '</title><body><h1>' + esc(current.title) + '</h1><pre>' + esc(content) + '</pre></body></html>'; mime = 'text/html'; }
   download(new Blob([content], { type: mime + ';charset=utf-8' }), filename() + '.' + type);
@@ -432,7 +437,7 @@ $('recoverTakes').onclick = () => exclusiveAudio(async () => {
   if (!drafts.length) { toast('No hay tomas interrumpidas'); return; }
   for (const draft of drafts) {
     if (!draft.count) { await discardRecordingDraft(draft.id); continue; }
-    const take = await finalizeRecordingDraft(draft.id);
+    const take = await finalizeRecordingDraft(draft.id, 'recuperada');
     let target = store.state.meetings.find(m => m.id === take.meetingId);
     if (!target) {
       target = {...newMeeting(), id:take.meetingId, title:'Reunión recuperada'};

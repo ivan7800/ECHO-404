@@ -1,5 +1,5 @@
 """Local inference adapters. No downloads, tools, or arbitrary outbound endpoints."""
-import io
+import tempfile
 import itertools
 import json
 import re
@@ -136,16 +136,15 @@ def model_ready(path):
             and any((root / name).is_file() for name in ['vocabulary.txt', 'vocabulary.json']))
 
 
-def read_audio(path):
+def decode_audio(path, buffer):
     """Decode one audio stream from supplied bytes, with a cap on decoded samples."""
     import av
     import numpy as np
 
     rate = 16000
-    limit = 90 * 60 * rate
+    limit = 3 * 3600 * rate
     options = {'format_whitelist': 'wav,flac,mp3,mov,mp4,m4a,3gp,3g2,mj2,ogg,matroska,webm,aac,aiff',
                'protocol_whitelist': 'pipe'}
-    buffer = io.BytesIO()
     count = 0
     with Path(path).open('rb') as stream, av.open(stream, mode='r', options=options) as container:
         if not container.streams.audio:
@@ -157,16 +156,15 @@ def read_audio(path):
             for mono in resampler.resample(frame):
                 count += mono.samples
                 if count > limit:
-                    raise AIError('duration_limit', 'El límite por audio es de 90 minutos.')
+                    raise AIError('duration_limit', 'El límite por audio es de 3 horas.')
                 buffer.write(mono.to_ndarray().tobytes())
     if not count:
         raise AIError('no_audio', 'El archivo no contiene muestras de audio.')
-    samples = np.frombuffer(buffer.getbuffer(), dtype=np.int16).astype(np.float32)
-    samples /= 32768.0
-    return samples
+    buffer.seek(0)
+    return count
 
 
-def transcribe(path, model_path, language):
+def transcribe(path, model_path, language, report=None):
     if language not in ['es', 'ca', 'en', 'auto']:
         raise AIError('invalid_language', 'Idioma no compatible.')
     if not model_ready(model_path):
@@ -176,21 +174,53 @@ def transcribe(path, model_path, language):
     except ImportError:
         raise AIError('whisper_missing', 'Instala requirements-ai.txt en .venv-ai.')
     try:
-        samples = read_audio(path)
-        model = WhisperModel(str(Path(model_path).resolve()), device='cpu', compute_type='int8',
-                             local_files_only=True, cpu_threads=4, num_workers=1)
-        segments, info = model.transcribe(samples, language=None if language == 'auto' else language,
-                                         beam_size=5, vad_filter=True, word_timestamps=False)
-        output = []
-        for segment in segments:
-            if len(output) >= 10000:
-                raise AIError('transcript_limit', 'La transcripción supera el límite de segmentos.')
-            output.append({'start': round(segment.start, 3), 'end': round(segment.end, 3), 'text': segment.text.strip()})
-        text = ' '.join(s['text'] for s in output)
-        if len(text) > 200000:
-            raise AIError('transcript_limit', 'La transcripción supera 200.000 caracteres.')
-        return {'provider': 'faster-whisper-local', 'language': info.language,
-                'duration': round(info.duration, 3), 'text': text, 'segments': output}
+        import numpy as np
+        with tempfile.TemporaryFile(dir=Path(path).parent) as pcm:
+            count = decode_audio(path, pcm)
+            model = WhisperModel(str(Path(model_path).resolve()), device='cpu', compute_type='int8',
+                                 local_files_only=True, cpu_threads=4, num_workers=1)
+            rate = 16000
+            output = []
+            chars = 0
+            offset = 0
+            detected = None if language == 'auto' else language
+            while offset < count:
+                pcm.seek(offset * 2)
+                raw = pcm.read(rate * 60 * 2)
+                samples = np.frombuffer(raw, dtype=np.int16)
+                if offset + len(samples) < count:
+                    # Choose the quietest 20 ms in the final second, away from a voiced word.
+                    tail = samples[-rate:].astype(np.float32).reshape(50, -1)
+                    cut = len(samples) - rate + (1 + int(np.argmin(np.mean(tail * tail, axis=1)))) * 320
+                    samples = samples[:cut]
+                if report:
+                    report(offset, count)
+                if not np.any(samples):
+                    offset += len(samples)
+                    continue
+                for attempt in range(2):
+                    try:
+                        found, info = model.transcribe(samples.astype(np.float32) / 32768,
+                            language=detected, beam_size=5, vad_filter=True)
+                        rows = list(found)
+                        break
+                    except RuntimeError:
+                        if attempt:
+                            raise
+                if rows and detected is None:
+                    detected = info.language
+                for row in rows:
+                    words = row.text.strip()
+                    if not words:
+                        continue
+                    chars += len(words) + 1
+                    if len(output) >= 10000 or chars > 200000:
+                        raise AIError('transcript_limit', 'Se alcanzó el límite de texto por reunión.')
+                    output.append({'start': round(offset/rate + row.start, 3),
+                        'end': round(offset/rate + row.end, 3), 'text': words})
+                offset += len(samples)
+            return {'provider':'faster-whisper-local', 'duration':count/rate, 'language':detected or language,
+                    'text':' '.join(s['text'] for s in output), 'segments':output}
     except AIError:
         raise
     except Exception:
