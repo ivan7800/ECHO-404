@@ -196,7 +196,7 @@ async function toggleRecording(source = 'microphone') {
   if (!window.isSecureContext) { audioStatus('Abre ECHO-404 en HTTPS o en localhost para permitir el micrófono.', true); return; }
   if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { audioStatus('Este navegador no ofrece captura de audio. Prueba Chrome o Edge actualizado.', true); return; }
   if (source === 'display' && !navigator.mediaDevices.getDisplayMedia) { audioStatus('Este navegador no permite compartir audio de pestaña.', true); return; }
-  if (location.hostname.endsWith('.github.io') && !store.state.settings.speechEnabled) {
+  if (source === 'microphone' && location.hostname.endsWith('.github.io') && !store.state.settings.speechEnabled) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SR && confirm('Para ver la transcripción en GitHub Pages se usa el reconocimiento del navegador. Puede enviar tu voz a su proveedor y requiere Internet. ¿Activarlo para esta reunión y las siguientes?')) {
       store.state.settings.speechEnabled = true; store.save(); renderSettings();
@@ -409,3 +409,4 @@ async function boot() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').then(registration => registration.update()).catch(() => {});
 }
 boot().catch(error => { $('saveState').textContent = 'Error al abrir: ' + error.message; });
+
