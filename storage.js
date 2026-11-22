@@ -69,17 +69,20 @@ export class Store {
 
 export function openAudioDb() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('echo404-audio', 1);
-    request.onupgradeneeded = () => request.result.createObjectStore('recordings', { keyPath: 'id' });
+    const request = indexedDB.open('echo404-audio', 2);
+    request.onupgradeneeded = () => {
+      const store = request.transaction.objectStoreNames.contains('recordings') ? request.transaction.objectStore('recordings') : request.result.createObjectStore('recordings', { keyPath: 'id' });
+      if (!store.indexNames.contains('meetingId')) store.createIndex('meetingId', 'meetingId');
+    };
     request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
   });
 }
 export async function audioRecord(action, value) {
   const database = await openAudioDb();
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction('recordings', action === 'get' ? 'readonly' : 'readwrite');
+    const transaction = database.transaction('recordings', ['get', 'list'].includes(action) ? 'readonly' : 'readwrite');
     const objectStore = transaction.objectStore('recordings');
-    const request = action === 'get' ? objectStore.get(value) : action === 'clear' ? objectStore.clear() : objectStore.put(value);
+    const request = action === 'get' ? objectStore.get(value) : action === 'list' ? objectStore.index('meetingId').getAll(value) : action === 'clear' ? objectStore.clear() : objectStore.put(value);
     transaction.oncomplete = () => { database.close(); resolve(request.result); };
     transaction.onerror = () => { database.close(); reject(transaction.error); };
     transaction.onabort = () => { database.close(); reject(transaction.error || Error('Guardado cancelado')); };

@@ -114,6 +114,10 @@ try {
     await page.locator('#downloadAudio').waitFor({ state: 'visible' }); await page.waitForTimeout(650); await waitSaved(page);
     await page.reload(); await waitSaved(page); const filePromise = page.waitForEvent('download'); await page.locator('#downloadAudio').click();
     const file = await filePromise; assert.ok((await readFile(await file.path())).length > 0);
+    await page.locator('#record').click(); await page.waitForTimeout(700); await page.locator('#record').click();
+    await page.waitForFunction(() => document.querySelectorAll('#recordingLibrary button').length >= 2);
+    await page.reload(); await waitSaved(page);
+    assert.equal(await page.locator('#recordingLibrary button').count(), 2);
   });
   await check('Browser speech appears live and remains saved after reload', async () => {
     await page.evaluate(() => { window.SpeechRecognition = class {
@@ -155,7 +159,7 @@ try {
   });
   await check('Offline shell opens without caching API responses', async () => {
     await page.evaluate(() => navigator.serviceWorker.ready); await page.waitForTimeout(500);
-    const keys = await page.evaluate(async () => { const c = await caches.open('echo-404-1.6.3-rc.3'); return (await c.keys()).map(r => r.url); });
+    const keys = await page.evaluate(async () => { const c = await caches.open('echo-404-1.6.4-rc.1'); return (await c.keys()).map(r => r.url); });
     assert.ok(keys.some(key => key.endsWith('/theme.css'))); assert.ok(keys.every(key => !key.includes('/api/')));
     await context.setOffline(true); await page.reload(); await page.locator('#saveMeeting').waitFor({ state: 'visible' });
     await page.waitForFunction(() => !document.getElementById('saveMeeting').disabled); assert.equal(await page.locator('#meetingTitle').inputValue(), 'Seguimiento VPN');

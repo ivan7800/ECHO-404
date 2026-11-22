@@ -1,4 +1,4 @@
-# ECHO-404 · 1.6.3 RC3
+# ECHO-404 · 1.6.4 RC1
 
 Espacio personal para reuniones, notas, decisiones y tareas. La interfaz Command Center coloca la grabación, las notas y los acuerdos en un mismo espacio de trabajo. Incluye temas claro y oscuro. Python guarda el texto en SQLite. Si instalas los motores opcionales, puedes transcribir audio con Whisper y proponer un acta con Ollama en tu equipo.
 
@@ -38,6 +38,23 @@ Si el puerto está ocupado, cierra el servidor anterior o ejecuta `python3 serve
 ## Micrófono en GitHub Pages
 
 Abre `https://ivan7800.github.io/ECHO-404/` en Chrome, Edge o Firefox, conecta un micrófono y pulsa **Iniciar grabación**. El navegador solicita permiso si todavía no lo concediste o bloqueaste. Si el acceso está bloqueado, cambia el permiso de micrófono en el icono situado junto a la dirección y vuelve a intentarlo. Si no hay dispositivo, conecta uno y comprueba los permisos del sistema. GitHub Pages ofrece transcripción en directo cuando el navegador admite SpeechRecognition y aceptas activarlo; puede enviar voz al proveedor del navegador y requiere conexión. El texto aparece en la pestaña Transcripción. Descarga el audio al terminar: GitHub Pages guarda datos en ese navegador y perfil, sin SQLite ni Whisper. Para transcripción automática y guardado en SQLite, usa los lanzadores del paquete local e instala Whisper. El reconocimiento de voz del navegador es opcional y distinto de la grabación.
+
+## Instrucciones por dispositivo
+
+### Windows 11 y Linux Mint
+
+1. Descarga el ZIP generado por `python3 scripts/package.py`, extráelo completo y abre el lanzador correspondiente. El navegador abrirá `http://127.0.0.1:4173/`.
+2. Para una reunión presencial, pulsa **Iniciar grabación** y concede acceso al micrófono. Para Meet o Teams web en Chrome/Edge, pulsa **Grabar audio de pestaña**, elige la pestaña de la llamada y activa **Compartir audio**. Esta fuente graba el audio compartido; si también necesitas el micrófono local, usa una mezcla de audio externa o realiza otra toma.
+3. Pulsa **Detener**, espera a que aparezca la toma en **Tomas guardadas** y descarga una copia. La última toma se transcribe automáticamente solo si Whisper está instalado y el servidor local está abierto. Usa **Asistente local** para revisar la propuesta y generar el acta con Ollama si lo instalaste.
+4. Exporta copia JSON y descarga las tomas por separado. El JSON no contiene audio. No cambies el puerto ni el perfil del navegador si quieres volver a encontrar las tomas.
+
+### iPhone, iPad y Android
+
+Abre GitHub Pages en el navegador y concede acceso al micrófono. La transcripción en directo depende de que el navegador admita `SpeechRecognition`; puede usar un servicio externo y requiere aceptación. Mantén la página en primer plano mientras grabas: el bloqueo de pantalla puede suspender el navegador. Detén y descarga cada toma. GitHub Pages no ejecuta Whisper, Ollama ni SQLite. Para transcribir audio guardado con Whisper, pásalo al ordenador y ábrelo en **Asistente local**. La captura de pestaña está pensada para escritorio.
+
+### Límites verificados
+
+La prueba automatizada usa un micrófono y un reconocimiento simulados. El límite de 90 minutos es una parada de seguridad, no una duración garantizada. Una llamada real en Windows, Linux Mint, Safari y Android requiere prueba física; la captura de pestaña depende del navegador y de la opción **Compartir audio**. ECHO-404 no sincroniza dispositivos, identifica hablantes ni integra calendarios.
 
 ## Dónde se guardan los datos
 

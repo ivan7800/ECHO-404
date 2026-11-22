@@ -1,5 +1,11 @@
 # Cambios
 
+## 1.6.4-rc.1
+
+- Lista todas las tomas de audio de cada reunión, incluidas las guardadas en versiones anteriores; cada una se puede descargar.
+- Captura opcional de audio de una pestaña en navegadores de escritorio compatibles, con permiso explícito de compartir pantalla y audio. La transcripción de esa fuente requiere Whisper local.
+- Migra la base de audio de IndexedDB a un índice por reunión sin borrar grabaciones previas.
+
 ## 1.6.3-rc.3
 
 - GitHub Pages ofrece transcripción visible durante la grabación usando el reconocimiento del navegador, previa aceptación expresa. Puede requerir Internet y enviar voz a su proveedor.
