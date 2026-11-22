@@ -129,7 +129,8 @@ try {
     });
     await page.locator('#recordTab').click();
     await page.waitForFunction(() => document.getElementById('audioState').textContent.includes('Compartir audio'));
-    assert.equal(await page.locator('#record').isEnabled(), true);
+    await page.locator('#record').waitFor({ state: 'visible' });
+    await page.waitForFunction(() => !document.getElementById('record').disabled && !document.getElementById('recordTab').disabled);
     await page.evaluate(() => {
       navigator.mediaDevices.getDisplayMedia = () => navigator.mediaDevices.getUserMedia({ audio: true, video: true });
     });
