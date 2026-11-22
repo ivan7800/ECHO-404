@@ -19,7 +19,7 @@
       <button data-view="tasks"><span aria-hidden="true">✓</span> Tareas <small id="taskCount">0</small></button>
       <button data-view="settings"><span aria-hidden="true">⚙</span> Ajustes</button>
     </nav>
-    <div class="sidebar-footer"><span class="local-dot"></span> Espacio personal <small>ECHO-404 · 1.6.3 RC1</small></div>
+    <div class="sidebar-footer"><span class="local-dot"></span> Espacio personal <small>ECHO-404 · 1.6.3 RC2</small></div>
   </aside>
   <main id="main">
     <header class="topbar">
@@ -36,7 +36,7 @@
           <label class="sr-only" for="meetingTitle">Título de la reunión</label><input id="meetingTitle" class="title-input" value="Nueva reunión" maxlength="300">
           <div class="meeting-meta"><label>Proyecto<input id="project" placeholder="Sin proyecto" maxlength="100"></label><label>Etiquetas<input id="tags" placeholder="soporte, equipo…" maxlength="800"></label></div>
           <div class="recbar"><div class="record-pulse"><span id="recordDot" class="record-dot"></span></div><div class="record-info"><small>CAPTURA DE AUDIO</small><b id="timer">00:00:00</b><em id="audioState">Listo para grabar</em></div><div class="record-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><button id="record" class="record-button">Iniciar grabación</button></div>
-          <p class="hint record-hint">Al detener, el audio queda guardado en este navegador. Si Whisper está instalado, la transcripción se inicia y se guarda automáticamente. Máximo: 90 minutos o 128 MiB. Informa a los participantes.</p>
+          <p class="hint record-hint">Pulsa Grabar para solicitar permiso al navegador. El audio queda guardado en este navegador al detener la toma. Whisper y SQLite requieren iniciar el servidor local; en GitHub Pages puedes grabar y descargar el audio, pero no transcribirlo con Whisper. Máximo: 90 minutos o 128 MiB. Informa a los participantes.</p>
           <div class="tabs" role="tablist" aria-label="Contenido"><button id="notesTab" role="tab" aria-selected="true" aria-controls="notesPanel" class="active">Notas</button><button id="transcriptTab" role="tab" aria-selected="false" aria-controls="transcriptPanel">Transcripción</button></div>
           <div id="notesPanel" role="tabpanel" aria-labelledby="notesTab"><label class="sr-only" for="notes">Notas privadas</label><textarea id="notes" placeholder="Ideas, contexto y detalles que no quieres perder…"></textarea></div>
           <div id="transcriptPanel" role="tabpanel" aria-labelledby="transcriptTab" hidden><label class="sr-only" for="transcript">Transcripción editable</label><textarea id="transcript" placeholder="Pega una transcripción o activa el reconocimiento de voz en Ajustes."></textarea><p id="speechState" class="hint" role="status"></p><div class="transcript-download"><label for="transcriptFormat">Archivo de transcripción</label><select id="transcriptFormat"><option value="txt">TXT</option><option value="md">Markdown</option><option value="docx">Word DOCX</option></select><button id="downloadTranscript">Descargar transcripción</button></div></div>

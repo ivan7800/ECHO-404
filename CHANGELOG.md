@@ -1,5 +1,11 @@
 # Cambios
 
+## 1.6.3-rc.2
+
+- Grabación: mensaje visible mientras se solicita permiso y diagnóstico específico para micrófono bloqueado, ausente u ocupado.
+- La interfaz explica el funcionamiento local de GitHub Pages y cuándo se requiere el servidor para Whisper y SQLite.
+- Actualiza la caché de la aplicación para entregar estos cambios.
+
 ## 1.6.3-rc.1
 
 - El estado de guardado espera la confirmación de SQLite y muestra los conflictos o copias pendientes.
