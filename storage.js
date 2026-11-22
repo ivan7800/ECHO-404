@@ -34,7 +34,7 @@ export class Store {
       if (this.pending) await this.sync(); else this.onStatus('Guardado en SQLite');
     } catch { this.connected = false; this.onStatus('Modo local · servidor no disponible'); }
   }
-  save() { this.pending = true; this.cache(); clearTimeout(this.timer); this.timer = setTimeout(() => this.sync(), 300); }
+  save() { this.pending = true; this.onStatus('Guardando…'); this.cache(); clearTimeout(this.timer); this.timer = setTimeout(() => this.sync(), 300); }
   async sync() {
     if (this.busy || this.conflict) return;
     if (!this.connected) { this.onStatus('Guardado en este navegador'); return; }
