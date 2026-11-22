@@ -4,14 +4,14 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '1.6.4-rc.1'
+VERSION = '1.7.0-rc.1'
 FILES = [
     'README.md', 'CHANGELOG.md', 'RELEASE-CANDIDATE.md', 'LEEME_LANZADORES.txt',
     'CONFIGURACION-IA.md', 'QA-v1.6.1.md', 'QA-v1.6.2.md',
     'INICIAR_ECHO-404.bat', 'INICIAR_ECHO-404.ps1', 'iniciar-echo-404.sh',
     'INSTALAR_WHISPER.bat', 'instalar-whisper.sh', 'requirements-ai.txt',
     'package.json', 'server.py', 'ai_jobs.py', 'ai_worker.py', 'local_ai.py',
-    'prepare_ai.py', 'document_export.py', 'app.js', 'capture.js', 'ai-client.js',
+    'prepare_ai.py', 'document_export.py', 'app.js', 'capture.js', 'notebook.js', 'ai-client.js',
     'transcript-export.js', 'model.js', 'storage.js', 'sw.js', 'index.html',
     'styles.css', 'theme.css', 'theme-init.js', 'icon.svg', 'manifest.webmanifest',
 ]

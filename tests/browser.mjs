@@ -212,9 +212,44 @@ try {
     await page.setViewportSize({ width: 1440, height: 1000 }); await page.screenshot({ path: join(artifactDir, 'light.png'), fullPage: true });
     await page.locator('#themeToggle').click(); await page.screenshot({ path: join(artifactDir, 'dark.png'), fullPage: true });
   });
+  await check('Interrupted capture recovers committed fragments and round-trips full backup', async () => {
+    await page.locator('#newMeeting').click();
+    await page.locator('#meetingTitle').fill('Recuperación');
+    await page.locator('#record').click();
+    await page.waitForFunction(async () => {
+      const db = await import('./storage.js');
+      return (await db.listRecordingDrafts()).some(d => d.count >= 12);
+    }, null, {timeout: 100000});
+    const before = await page.evaluate(async () => (await (await import('./storage.js')).listRecordingDrafts())[0]);
+    assert.ok(before.bytes > 1000);
+    await page.reload(); await waitSaved(page);
+    await page.locator('[data-view="settings"]').click();
+    await page.locator('#recoverTakes').click();
+    await page.waitForFunction(() => document.querySelectorAll('#recordingLibrary button').length > 0);
+    await page.waitForFunction(async () => !(await (await import('./storage.js')).listRecordingDrafts()).length);
+    await page.waitForTimeout(650); await waitSaved(page);
+    const promise = page.waitForEvent('download'); await page.locator('#fullExport').click();
+    const backup = await (await promise).path();
+    page.once('dialog', dialog => dialog.accept());
+    await page.locator('#fullRestore').setInputFiles(backup);
+    await page.waitForFunction(() => document.getElementById('toast').textContent.includes('restaurada'));
+    const result = await page.evaluate(async id => {
+      const take = await (await import('./storage.js')).audioRecord('get',id);
+      const ctx = new AudioContext();
+      try {
+        const buffer = await ctx.decodeAudioData(await take.blob.arrayBuffer());
+        return {bytes: take.blob.size, seconds: buffer.duration};
+      } finally { await ctx.close(); }
+    }, before.id);
+    assert.ok(result.bytes >= before.bytes && result.seconds >= 55);
+    console.log('Recovery measurement', JSON.stringify(result));
+    await page.locator('[data-view="meetings"]').click();
+    await page.locator('#search').fill('Seguimiento VPN');
+    await page.locator('[data-open]').first().click(); await waitSaved(page);
+  });
   await check('Offline shell opens without caching API responses', async () => {
     await page.evaluate(() => navigator.serviceWorker.ready); await page.waitForTimeout(500);
-    const keys = await page.evaluate(async () => { const c = await caches.open('echo-404-1.6.4-rc.1'); return (await c.keys()).map(r => r.url); });
+    const keys = await page.evaluate(async () => { const c = await caches.open('echo-404-1.7.0-rc.1'); return (await c.keys()).map(r => r.url); });
     assert.ok(keys.some(key => key.endsWith('/theme.css'))); assert.ok(keys.every(key => !key.includes('/api/')));
     await context.setOffline(true); await page.reload(); await page.locator('#saveMeeting').waitFor({ state: 'visible' });
     await page.waitForFunction(() => !document.getElementById('saveMeeting').disabled); assert.equal(await page.locator('#meetingTitle').inputValue(), 'Seguimiento VPN');

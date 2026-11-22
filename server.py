@@ -16,9 +16,9 @@ from local_ai import AIError
 from document_export import word_document
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '1.6.4-rc.1'
+VERSION = '1.7.0-rc.1'
 ASSETS = {'index.html': 'text/html', 'styles.css': 'text/css', 'theme.css': 'text/css',
-          'app.js': 'text/javascript', 'capture.js': 'text/javascript', 'model.js': 'text/javascript', 'storage.js': 'text/javascript',
+          'app.js': 'text/javascript', 'capture.js': 'text/javascript', 'notebook.js': 'text/javascript', 'model.js': 'text/javascript', 'storage.js': 'text/javascript',
           'theme-init.js': 'text/javascript', 'ai-client.js': 'text/javascript', 'sw.js': 'text/javascript',
           'transcript-export.js': 'text/javascript',
           'manifest.webmanifest': 'application/manifest+json', 'icon.svg': 'image/svg+xml'}

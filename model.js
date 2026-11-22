@@ -1,4 +1,4 @@
-export const VERSION = '1.6.4-rc.1';
+export const VERSION = '1.7.0-rc.1';
 export const SCHEMA = 'echo-404-v2';
 export const now = () => new Date().toISOString();
 export const uid = () => crypto.randomUUID();
@@ -28,6 +28,8 @@ export function normalizeState(input) {
       summary: str(m.summary), decisions: str(m.decisions), project: str(m.project, 100),
       tags: [...new Set((Array.isArray(m.tags) ? m.tags : []).filter(t => typeof t === 'string').map(t => t.trim().slice(0, 40)).filter(Boolean))].slice(0, 20),
       date, updatedAt: Number.isFinite(Date.parse(m.updatedAt)) ? m.updatedAt : date,
+      segments: Array.isArray(m.segments) ? m.segments.filter(s => s && Number.isFinite(s.start) && Number.isFinite(s.end) && typeof s.text === 'string').map(({start,end,text}) => ({start,end,text})) : [],
+      transcriptAudioId: validId(m.transcriptAudioId) ? m.transcriptAudioId : null,
       audioId: validId(m.audioId) ? m.audioId : null, duration: Math.max(0, Number(m.duration) || 0) });
   }
   for (const t of raw.tasks) {
