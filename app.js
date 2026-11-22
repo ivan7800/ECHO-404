@@ -69,6 +69,7 @@ function renderEditor() {
   $('status').textContent = store.conflict ? 'Conflicto de guardado' : store.pending ? 'Pendiente de sincronizar' : store.state.meetings.some(m => m.id === current.id) ? 'Guardada' : 'Borrador';
   $('timer').textContent = formatTime(current.duration); audioStatus(current.audioId ? 'Audio disponible en este navegador' : 'Listo para grabar');
   $('downloadAudio').classList.toggle('hidden', !current.audioId); $('speechState').textContent = '';
+  void renderAudioLibrary();
   renderMeetingTasks();
   updateAI?.();
 }
@@ -183,7 +184,7 @@ function startSpeech() {
   sr.onend = () => { if (recording && !stopping && recognition === sr) { speechPrefix = $('transcript').value; try { sr.start(); } catch {} } };
   try { sr.start(); } catch { $('speechState').textContent = 'No se pudo iniciar el reconocimiento. El audio sigue activo.'; }
 }
-async function toggleRecording() {
+async function toggleRecording(source = 'microphone') {
   if (stopping) return;
   if (recording) {
     stopping = true; $('record').disabled = true; $('status').textContent = 'Guardando audio';
@@ -193,7 +194,8 @@ async function toggleRecording() {
     return;
   }
   if (!window.isSecureContext) { audioStatus('Abre ECHO-404 en HTTPS o en localhost para permitir el micrófono.', true); return; }
-  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { audioStatus('Este navegador no ofrece captura de micrófono. Prueba Chrome, Edge o Firefox actualizado.', true); return; }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { audioStatus('Este navegador no ofrece captura de audio. Prueba Chrome o Edge actualizado.', true); return; }
+  if (source === 'display' && !navigator.mediaDevices.getDisplayMedia) { audioStatus('Este navegador no permite compartir audio de pestaña.', true); return; }
   if (location.hostname.endsWith('.github.io') && !store.state.settings.speechEnabled) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SR && confirm('Para ver la transcripción en GitHub Pages se usa el reconocimiento del navegador. Puede enviar tu voz a su proveedor y requiere Internet. ¿Activarlo para esta reunión y las siguientes?')) {
@@ -203,13 +205,18 @@ async function toggleRecording() {
       $('transcriptTab').click();
     }
   }
-  $('record').disabled = true; let stream;
+  $('record').disabled = true; $('recordTab').disabled = true; let stream, displayStream;
   try {
-    audioStatus('Solicitando permiso de micrófono…');
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true }); collect();
+    audioStatus(source === 'display' ? 'Elige una pestaña y activa «Compartir audio»…' : 'Solicitando permiso de micrófono…');
+    if (source === 'display') {
+      displayStream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
+      if (!displayStream.getAudioTracks().length) throw Object.assign(Error('Sin audio compartido'), { name: 'NoDisplayAudio' });
+      stream = new MediaStream(displayStream.getAudioTracks());
+    } else stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    collect();
     const mimeType = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].find(type => MediaRecorder.isTypeSupported?.(type));
     const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-    const session = { recorder, stream, chunks: [], bytes: 0, meetingId: current.id, started: performance.now(), timer: null };
+    const session = { recorder, stream, displayStream, chunks: [], bytes: 0, meetingId: current.id, started: performance.now(), timer: null };
     recording = session;
     recorder.ondataavailable = event => {
       if (!event.data.size) return;
@@ -228,8 +235,9 @@ async function toggleRecording() {
         void toggleRecording();
       }
     });
+    for (const track of displayStream?.getVideoTracks() || []) track.addEventListener('ended', () => { if (recording === session && !stopping) void toggleRecording(); });
     recorder.start(5000); $('record').textContent = 'Detener'; $('recordDot').classList.add('live'); $('recordDot').closest('.recbar').classList.add('recording'); $('status').textContent = 'Grabando';
-    audioStatus('Micrófono activo · grabando'); $('newMeeting').disabled = true;
+    audioStatus(source === 'display' ? 'Audio de pestaña activo · grabando' : 'Micrófono activo · grabando'); $('newMeeting').disabled = true;
     session.timer = setInterval(() => {
       current.duration = Math.floor((performance.now() - session.started) / 1000);
       $('timer').textContent = formatTime(current.duration);
@@ -238,15 +246,17 @@ async function toggleRecording() {
         void toggleRecording();
       }
     }, 250);
-    persist(); startSpeech();
+    persist();
+    if (source === 'display') { $('transcriptTab').click(); $('speechState').textContent = 'El audio de la pestaña se transcribe al detener con Whisper local. El dictado del navegador solo escucha el micrófono.'; }
+    else startSpeech();
   } catch (error) {
-    stream?.getTracks().forEach(track => track.stop()); recording = null;
-    audioStatus(microphoneMessage(error), true);
-  } finally { $('record').disabled = false; }
+    stream?.getTracks().forEach(track => track.stop()); displayStream?.getTracks().forEach(track => track.stop()); recording = null;
+    audioStatus(error.name === 'NoDisplayAudio' ? 'No se compartió audio. Selecciona una pestaña y marca «Compartir audio».' : microphoneMessage(error), true);
+  } finally { $('record').disabled = false; if (!recording) $('recordTab').disabled = false; }
 }
 async function finalizeRecording(session) {
   if (session.finalizing) return; session.finalizing = true; stopping = true;
-  clearInterval(session.timer); stopSpeech(); session.stream.getTracks().forEach(t => t.stop());
+  clearInterval(session.timer); stopSpeech(); session.stream.getTracks().forEach(t => t.stop()); session.displayStream?.getTracks().forEach(t => t.stop());
   const blob = new Blob(session.chunks, { type: session.recorder.mimeType || 'audio/webm' });
   let recordingSaved = false;
   try {
@@ -255,15 +265,32 @@ async function finalizeRecording(session) {
     recordingSaved = true;
     current.audioId = audioId; current.duration = Math.floor((performance.now() - session.started) / 1000);
     $('downloadAudio').classList.remove('hidden'); $('audioState').textContent = 'Audio guardado en este navegador'; toast('Grabación guardada');
+    void renderAudioLibrary();
   } catch (error) {
     toast('No se pudo guardar audio. Se descargará una copia si hay datos.');
     if (blob.size) download(blob, filename() + audioExtension(blob.type));
   } finally {
     recording = null; stopping = false; $('record').disabled = false; $('record').textContent = 'Grabar otra toma';
-    $('newMeeting').disabled = false; $('recordDot').classList.remove('live'); $('recordDot').closest('.recbar').classList.remove('recording'); persist();
+    $('newMeeting').disabled = false; $('recordTab').disabled = false; $('recordDot').classList.remove('live'); $('recordDot').closest('.recbar').classList.remove('recording'); persist();
     updateAI?.();
     if (current.audioId && recordingSaved) void updateAI?.transcribeSaved();
   }
+}
+async function renderAudioLibrary() {
+  const meetingId = current.id, container = $('recordingLibrary');
+  try {
+    const recordings = (await audioRecord('list', meetingId)).sort((a, b) => b.createdAt - a.createdAt);
+    if (meetingId !== current.id) return;
+    container.replaceChildren();
+    if (!recordings.length) return;
+    const heading = document.createElement('p'); heading.textContent = 'Tomas guardadas en este navegador'; container.append(heading);
+    for (const item of recordings) {
+      const button = document.createElement('button');
+      button.type = 'button'; button.textContent = 'Descargar · ' + new Date(item.createdAt).toLocaleString('es-ES') + ' · ' + (item.blob.size / 1048576).toFixed(1) + ' MiB';
+      button.onclick = () => download(item.blob, filename() + '-' + item.id.slice(0, 8) + audioExtension(item.blob.type));
+      container.append(button);
+    }
+  } catch { container.textContent = 'No se pueden leer las tomas guardadas en este navegador.'; }
 }
 async function downloadAudio() {
   try {
@@ -304,7 +331,7 @@ $('addMeetingTask').onclick = () => { persist(); if (!store.state.meetings.some(
 $('addTask').onclick = () => openTask(); $('taskForm').onsubmit = saveTask;
 for (const id of ['closeTask', 'cancelTask']) $(id).onclick = () => $('taskDialog').close();
 $('deleteTask').onclick = () => { if (confirm('¿Eliminar esta tarea?')) { store.state.tasks = store.state.tasks.filter(t => t.id !== taskEditing); store.save(); renderLists(); $('taskDialog').close(); } };
-$('record').onclick = toggleRecording; $('downloadAudio').onclick = downloadAudio;
+$('record').onclick = () => toggleRecording(); $('recordTab').onclick = () => toggleRecording('display'); $('downloadAudio').onclick = downloadAudio;
 $('downloadTranscript').onclick = async () => {
   const text = $('transcript').value, format = $('transcriptFormat').value;
   try {

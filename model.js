@@ -1,4 +1,4 @@
-export const VERSION = '1.6.3-rc.3';
+export const VERSION = '1.6.4-rc.1';
 export const SCHEMA = 'echo-404-v2';
 export const now = () => new Date().toISOString();
 export const uid = () => crypto.randomUUID();

@@ -74,6 +74,10 @@ main { width: 100%; max-width: 1660px; margin: 0 auto; padding: 42px 48px 64px; 
 .recbar.recording .record-wave i:nth-child(3), .recbar.recording .record-wave i:nth-child(5) { animation-delay: .24s; }
 .record-button { min-width: 137px; background: var(--button); }
 .record-hint { margin: 9px 2px 0; }
+.tab-capture { margin: 9px 2px 0; font-size: 11px; }
+.recording-library { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 10px; }
+.recording-library p { width: 100%; margin: 0; color: var(--muted); font-size: 11px; }
+.recording-library button { padding: 6px 9px; font-size: 10px; }
 .record-info em.error { color: var(--danger, #d25d5d); font-style: normal; }
 .hint { font-size: 10px; color: var(--muted); line-height: 1.65; }
 .tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); margin: 28px 0 8px; }
