@@ -1,4 +1,4 @@
-# ECHO-404 · 1.6.3 RC2
+# ECHO-404 · 1.6.3 RC3
 
 Espacio personal para reuniones, notas, decisiones y tareas. La interfaz Command Center coloca la grabación, las notas y los acuerdos en un mismo espacio de trabajo. Incluye temas claro y oscuro. Python guarda el texto en SQLite. Si instalas los motores opcionales, puedes transcribir audio con Whisper y proponer un acta con Ollama en tu equipo.
 
@@ -37,7 +37,7 @@ Si el puerto está ocupado, cierra el servidor anterior o ejecuta `python3 serve
 
 ## Micrófono en GitHub Pages
 
-Abre `https://ivan7800.github.io/ECHO-404/` en Chrome, Edge o Firefox, conecta un micrófono y pulsa **Iniciar grabación**. El navegador solicita permiso si todavía no lo concediste o bloqueaste. Si el acceso está bloqueado, cambia el permiso de micrófono en el icono situado junto a la dirección y vuelve a intentarlo. Si no hay dispositivo, conecta uno y comprueba los permisos del sistema. Descarga el audio al terminar: GitHub Pages guarda datos en ese navegador y perfil, sin SQLite ni Whisper. Para transcripción automática y guardado en SQLite, usa los lanzadores del paquete local e instala Whisper. El reconocimiento de voz del navegador es opcional y distinto de la grabación.
+Abre `https://ivan7800.github.io/ECHO-404/` en Chrome, Edge o Firefox, conecta un micrófono y pulsa **Iniciar grabación**. El navegador solicita permiso si todavía no lo concediste o bloqueaste. Si el acceso está bloqueado, cambia el permiso de micrófono en el icono situado junto a la dirección y vuelve a intentarlo. Si no hay dispositivo, conecta uno y comprueba los permisos del sistema. GitHub Pages ofrece transcripción en directo cuando el navegador admite SpeechRecognition y aceptas activarlo; puede enviar voz al proveedor del navegador y requiere conexión. El texto aparece en la pestaña Transcripción. Descarga el audio al terminar: GitHub Pages guarda datos en ese navegador y perfil, sin SQLite ni Whisper. Para transcripción automática y guardado en SQLite, usa los lanzadores del paquete local e instala Whisper. El reconocimiento de voz del navegador es opcional y distinto de la grabación.
 
 ## Dónde se guardan los datos
 

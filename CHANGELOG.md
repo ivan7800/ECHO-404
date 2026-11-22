@@ -1,5 +1,10 @@
 # Cambios
 
+## 1.6.3-rc.3
+
+- GitHub Pages ofrece transcripción visible durante la grabación usando el reconocimiento del navegador, previa aceptación expresa. Puede requerir Internet y enviar voz a su proveedor.
+- El texto reconocido se guarda en la reunión; cuando el navegador no admite esta función, se informa y conserva el audio para Whisper local.
+
 ## 1.6.3-rc.2
 
 - El indicador de SQLite pasa a «Guardando…» en cuanto cambia el contenido y solo confirma después de recibir respuesta del servidor.
