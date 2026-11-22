@@ -1,3 +1,4 @@
+import { prepareCapture } from './capture.js';
 import { VERSION, uid, now, newMeeting, normalizeState, emptyState, meetingMarkdown, extractActions } from './model.js';
 import { Store, audioRecord } from './storage.js';
 import { setupAI, mergeActions } from './ai-client.js';
@@ -184,7 +185,7 @@ function startSpeech() {
   sr.onend = () => { if (recording && !stopping && recognition === sr) { speechPrefix = $('transcript').value; try { sr.start(); } catch {} } };
   try { sr.start(); } catch { $('speechState').textContent = 'No se pudo iniciar el reconocimiento. El audio sigue activo.'; }
 }
-async function toggleRecording(source = 'microphone') {
+async function toggleRecording(source = 'microphone', prepared = null) {
   if (stopping) return;
   if (recording) {
     stopping = true; $('record').disabled = true; $('status').textContent = 'Guardando audio';
@@ -208,7 +209,8 @@ async function toggleRecording(source = 'microphone') {
   $('record').disabled = true; $('recordTab').disabled = true; let stream, displayStream;
   try {
     audioStatus(source === 'display' ? 'Elige una pestaña y activa «Compartir audio»…' : 'Solicitando permiso de micrófono…');
-    if (source === 'display') {
+    if (prepared) stream = prepared.stream;
+    else if (source === 'display') {
       displayStream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
       if (!displayStream.getAudioTracks().length) throw Object.assign(Error('Sin audio compartido'), { name: 'NoDisplayAudio' });
       stream = new MediaStream(displayStream.getAudioTracks());
@@ -216,7 +218,7 @@ async function toggleRecording(source = 'microphone') {
     collect();
     const mimeType = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].find(type => MediaRecorder.isTypeSupported?.(type));
     const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-    const session = { recorder, stream, displayStream, chunks: [], bytes: 0, meetingId: current.id, started: performance.now(), timer: null };
+    const session = { recorder, prepared, source, pausedAt: null, pausedMs: 0, stream, displayStream, chunks: [], bytes: 0, meetingId: current.id, started: performance.now(), timer: null };
     recording = session;
     recorder.ondataavailable = event => {
       if (!event.data.size) return;
@@ -229,17 +231,17 @@ async function toggleRecording(source = 'microphone') {
     };
     recorder.onerror = event => { audioStatus('Error de grabación. Intentando conservar el audio disponible.', true); if (recorder.state !== 'inactive') recorder.stop(); else finalizeRecording(session); };
     recorder.onstop = () => finalizeRecording(session);
-    for (const track of stream.getAudioTracks()) track.addEventListener('ended', () => {
+    for (const track of [...stream.getAudioTracks(), ...(prepared?.streams.flatMap(input => input.stream.getTracks()) || [])]) track.addEventListener('ended', () => {
       if (recording === session && !stopping) {
         toast('El micrófono se desconectó. Guardando el audio recibido.');
         void toggleRecording();
       }
     });
     for (const track of displayStream?.getVideoTracks() || []) track.addEventListener('ended', () => { if (recording === session && !stopping) void toggleRecording(); });
-    recorder.start(5000); $('record').textContent = 'Detener'; $('recordDot').classList.add('live'); $('recordDot').closest('.recbar').classList.add('recording'); $('status').textContent = 'Grabando';
+    recorder.start(5000); $('pauseCapture').hidden = false; if (prepared) showLevels(prepared, $('liveLevels')); $('record').textContent = 'Detener'; $('recordDot').classList.add('live'); $('recordDot').closest('.recbar').classList.add('recording'); $('status').textContent = 'Grabando';
     audioStatus(source === 'display' ? 'Audio de pestaña activo · grabando' : 'Micrófono activo · grabando'); $('newMeeting').disabled = true;
     session.timer = setInterval(() => {
-      current.duration = Math.floor((performance.now() - session.started) / 1000);
+      current.duration = Math.floor(((session.pausedAt ?? performance.now()) - session.started - session.pausedMs) / 1000);
       $('timer').textContent = formatTime(current.duration);
       if (current.duration >= MAX_RECORD_SECONDS && !stopping) {
         toast('Se alcanzaron 90 minutos. Guardando la grabación.');
@@ -247,23 +249,23 @@ async function toggleRecording(source = 'microphone') {
       }
     }, 250);
     persist();
-    if (source === 'display') { $('transcriptTab').click(); $('speechState').textContent = 'El audio de la pestaña se transcribe al detener con Whisper local. El dictado del navegador solo escucha el micrófono.'; }
+    if (source !== 'microphone') { $('transcriptTab').click(); $('speechState').textContent = 'El audio de la pestaña se transcribe al detener con Whisper local. El dictado del navegador solo escucha el micrófono.'; }
     else startSpeech();
   } catch (error) {
-    stream?.getTracks().forEach(track => track.stop()); displayStream?.getTracks().forEach(track => track.stop()); recording = null;
+    prepared?.close(); stream?.getTracks().forEach(track => track.stop()); displayStream?.getTracks().forEach(track => track.stop()); recording = null;
     audioStatus(error.name === 'NoDisplayAudio' ? 'No se compartió audio. Selecciona una pestaña y marca «Compartir audio».' : microphoneMessage(error), true);
   } finally { $('record').disabled = false; if (!recording) $('recordTab').disabled = false; }
 }
 async function finalizeRecording(session) {
   if (session.finalizing) return; session.finalizing = true; stopping = true;
-  clearInterval(session.timer); stopSpeech(); session.stream.getTracks().forEach(t => t.stop()); session.displayStream?.getTracks().forEach(t => t.stop());
+  clearInterval(session.timer); clearInterval(levelTimer); $('liveLevels').replaceChildren(); $('pauseCapture').hidden = true; $('pauseCapture').textContent = 'Pausar'; session.prepared?.close(); stopSpeech(); session.stream.getTracks().forEach(t => t.stop()); session.displayStream?.getTracks().forEach(t => t.stop());
   const blob = new Blob(session.chunks, { type: session.recorder.mimeType || 'audio/webm' });
   let recordingSaved = false;
   try {
     if (!blob.size) throw Error('No se recibió audio');
-    const audioId = uid(); await audioRecord('put', { id: audioId, meetingId: session.meetingId, blob, createdAt: Date.now() });
+    const audioId = uid(); await audioRecord('put', { id: audioId, meetingId: session.meetingId, blob, source: session.source, size: blob.size, duration: current.duration, status: 'guardada', createdAt: Date.now() });
     recordingSaved = true;
-    current.audioId = audioId; current.duration = Math.floor((performance.now() - session.started) / 1000);
+    current.audioId = audioId; current.duration = Math.floor(((session.pausedAt ?? performance.now()) - session.started - session.pausedMs) / 1000);
     $('downloadAudio').classList.remove('hidden'); $('audioState').textContent = 'Audio guardado en este navegador'; toast('Grabación guardada');
     void renderAudioLibrary();
   } catch (error) {
@@ -331,6 +333,57 @@ $('addMeetingTask').onclick = () => { persist(); if (!store.state.meetings.some(
 $('addTask').onclick = () => openTask(); $('taskForm').onsubmit = saveTask;
 for (const id of ['closeTask', 'cancelTask']) $(id).onclick = () => $('taskDialog').close();
 $('deleteTask').onclick = () => { if (confirm('¿Eliminar esta tarea?')) { store.state.tasks = store.state.tasks.filter(t => t.id !== taskEditing); store.save(); renderLists(); $('taskDialog').close(); } };
+let preparedCapture = null, preparation = 0, levelTimer;
+function showLevels(capture, container) {
+  clearInterval(levelTimer);
+  container.replaceChildren();
+  const meters = capture.levels.map(level => {
+    const label = document.createElement('label'), meter = document.createElement('meter');
+    meter.max = 1; label.append(level.label + ' ', meter); container.append(label);
+    return () => { meter.value = level.read(); };
+  });
+  levelTimer = setInterval(() => meters.forEach(update => update()), 100);
+}
+$('prepareCapture').onclick = async () => {
+  if (recording || stopping) return;
+  const serial = ++preparation;
+  $('captureDialog').showModal(); $('startPrepared').disabled = true;
+  $('prepareState').textContent = 'Autoriza las fuentes para ver sus niveles.';
+  try {
+    const capture = await prepareCapture($('captureMode').value);
+    if (serial !== preparation) { capture.close(); return; }
+    preparedCapture = capture;
+    showLevels(capture, $('prepareLevels'));
+    $('prepareState').textContent = 'Habla y reproduce sonido en la pestaña seleccionada. Comprueba los niveles antes de grabar.';
+    $('startPrepared').disabled = false;
+  } catch (error) {
+    if (serial === preparation) $('prepareState').textContent = error.name === 'NotAllowedError' ? 'Permiso denegado. Revisa los permisos y vuelve a elegir las fuentes.' : error.message;
+  }
+};
+$('cancelPrepared').onclick = () => $('captureDialog').close();
+$('captureDialog').onclose = () => {
+  preparation++; preparedCapture?.close(); preparedCapture = null;
+  if (!recording) clearInterval(levelTimer);
+  $('prepareLevels').replaceChildren();
+};
+$('startPrepared').onclick = () => {
+  const capture = preparedCapture;
+  if (!capture) return;
+  preparedCapture = null; $('captureDialog').close();
+  void toggleRecording(capture.mode, capture);
+};
+$('pauseCapture').onclick = () => {
+  const session = recording;
+  if (!session || stopping) return;
+  if (session.recorder.state === 'recording') {
+    session.recorder.pause(); session.pausedAt = performance.now(); stopSpeech();
+    $('pauseCapture').textContent = 'Reanudar'; audioStatus('Grabación en pausa');
+  } else if (session.recorder.state === 'paused') {
+    session.recorder.resume(); session.pausedMs += performance.now() - session.pausedAt;
+    session.pausedAt = null; $('pauseCapture').textContent = 'Pausar'; audioStatus('Grabación activa');
+    if (session.source === 'microphone') startSpeech();
+  }
+};
 $('record').onclick = () => toggleRecording(); $('recordTab').onclick = () => toggleRecording('display'); $('downloadAudio').onclick = downloadAudio;
 $('downloadTranscript').onclick = async () => {
   const text = $('transcript').value, format = $('transcriptFormat').value;

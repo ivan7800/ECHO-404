@@ -36,6 +36,11 @@
           <label class="sr-only" for="meetingTitle">Título de la reunión</label><input id="meetingTitle" class="title-input" value="Nueva reunión" maxlength="300">
           <div class="meeting-meta"><label>Proyecto<input id="project" placeholder="Sin proyecto" maxlength="100"></label><label>Etiquetas<input id="tags" placeholder="soporte, equipo…" maxlength="800"></label></div>
           <div class="recbar"><div class="record-pulse"><span id="recordDot" class="record-dot"></span></div><div class="record-info"><small>CAPTURA DE AUDIO</small><b id="timer">00:00:00</b><em id="audioState">Listo para grabar</em></div><div class="record-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><button id="record" class="record-button">Iniciar grabación</button></div>
+          <details><summary>Preparar audio y comprobar niveles</summary>
+          <label>Fuente <select id="captureMode"><option value="microphone">Micrófono</option><option value="display">Pestaña compartida</option><option value="mixed">Micrófono y pestaña</option></select></label>
+          <button id="prepareCapture">Comprobar fuentes</button></details>
+          <dialog id="captureDialog"><h2>Comprobar fuentes</h2><p id="prepareState" role="status"></p><div id="prepareLevels"></div><button id="startPrepared">Grabar reunión</button><button id="cancelPrepared">Cancelar</button></dialog>
+          <div id="liveLevels"></div><button id="pauseCapture" hidden>Pausar</button>
           <button id="recordTab" class="tab-capture">Grabar audio de pestaña · escritorio</button>
           <p class="hint record-hint">Pulsa Grabar para solicitar permiso. Para Meet o Teams web, elige «Grabar audio de pestaña» y activa «Compartir audio» en el selector. En GitHub Pages puedes activar transcripción en directo del navegador (puede enviar voz a su proveedor y requerir Internet). Whisper y SQLite requieren el lanzador local. El audio se guarda en este navegador al detener. Máximo: 90 minutos o 128 MiB. Informa a los participantes.</p>
           <div class="tabs" role="tablist" aria-label="Contenido"><button id="notesTab" role="tab" aria-selected="true" aria-controls="notesPanel" class="active">Notas</button><button id="transcriptTab" role="tab" aria-selected="false" aria-controls="transcriptPanel">Transcripción</button></div>

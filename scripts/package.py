@@ -11,7 +11,7 @@ FILES = [
     'INICIAR_ECHO-404.bat', 'INICIAR_ECHO-404.ps1', 'iniciar-echo-404.sh',
     'INSTALAR_WHISPER.bat', 'instalar-whisper.sh', 'requirements-ai.txt',
     'package.json', 'server.py', 'ai_jobs.py', 'ai_worker.py', 'local_ai.py',
-    'prepare_ai.py', 'document_export.py', 'app.js', 'ai-client.js',
+    'prepare_ai.py', 'document_export.py', 'app.js', 'capture.js', 'ai-client.js',
     'transcript-export.js', 'model.js', 'storage.js', 'sw.js', 'index.html',
     'styles.css', 'theme.css', 'theme-init.js', 'icon.svg', 'manifest.webmanifest',
 ]

@@ -153,6 +153,25 @@ try {
     await page.reload(); await waitSaved(page);
     assert.equal(await page.locator('#recordingLibrary button').count(), 2);
   });
+  await check('Prepared mixed capture meters, pause, resume and disconnect', async () => {
+    await page.locator('#captureMode').evaluate(el => { el.closest('details').open = true; });
+    await page.evaluate(() => {
+      navigator.mediaDevices.getDisplayMedia = async () => {
+        const stream = await navigator.mediaDevices.getUserMedia({audio: true, video: true});
+        window.testSharedTrack = stream.getAudioTracks()[0];
+        return stream;
+      };
+    });
+    await page.locator('#captureMode').selectOption('mixed');
+    await page.locator('#prepareCapture').click();
+    await page.waitForFunction(() => document.querySelectorAll('#prepareLevels meter').length === 2);
+    await page.locator('#startPrepared').click();
+    await page.locator('#pauseCapture').click();
+    assert.equal(await page.locator('#pauseCapture').textContent(), 'Reanudar');
+    await page.locator('#pauseCapture').click(); await page.waitForTimeout(750);
+    await page.evaluate(() => window.testSharedTrack.dispatchEvent(new Event('ended')));
+    await page.waitForFunction(() => document.querySelectorAll('#recordingLibrary button').length === 4);
+  });
   await check('Browser speech appears live and remains saved after reload', async () => {
     await page.evaluate(() => { window.SpeechRecognition = class {
       start() { setTimeout(() => this.onresult?.({ results: [{ isFinal: true, 0: { transcript: 'Dictado de prueba' } }] }), 30); }
