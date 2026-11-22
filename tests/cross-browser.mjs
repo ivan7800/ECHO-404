@@ -37,6 +37,7 @@ try {
     await page.reload();
     await page.waitForFunction(() => document.getElementById('saveState').textContent === 'Guardado en SQLite');
     assert.equal(await page.locator('#transcript').inputValue(), 'Dictado verificable.');
+    await page.locator('#transcriptTab').click();
     await page.locator('#transcriptFormat').selectOption('txt');
     const download = page.waitForEvent('download'); await page.locator('#downloadTranscript').click();
     assert.match(await readFile(await (await download).path(), 'utf8'), /Dictado verificable/);
@@ -47,3 +48,4 @@ try {
 } finally {
   await browser?.close(); server.kill('SIGTERM'); await once(server, 'exit').catch(() => {});
 }
+
