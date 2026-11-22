@@ -169,14 +169,17 @@ function stopSpeech() {
 function startSpeech() {
   if (!store.state.settings.speechEnabled) return;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { $('speechState').textContent = 'El navegador no tiene reconocimiento de voz. La grabación sigue funcionando.'; return; }
+  if (!SR) { $('speechState').textContent = 'Este navegador no admite transcripción en directo. Descarga el audio y usa Whisper con el lanzador local.'; $('transcriptTab').click(); return; }
   speechPrefix = $('transcript').value;
   const sr = new SR(); recognition = sr; sr.lang = store.state.settings.language; sr.continuous = true; sr.interimResults = false;
+  $('transcriptTab').click();
+  $('speechState').textContent = 'Escuchando · el texto aparecerá aquí al reconocer frases completas.';
   sr.onresult = event => {
     let full = ''; for (let i = 0; i < event.results.length; i++) if (event.results[i].isFinal) full += event.results[i][0].transcript + ' ';
     $('transcript').value = [speechPrefix, full.trim()].filter(Boolean).join('\n'); persist();
+    $('speechState').textContent = 'Transcripción en directo · guardando texto en esta reunión.';
   };
-  sr.onerror = event => { $('speechState').textContent = 'Reconocimiento de voz: ' + event.error + '. El audio continúa grabándose.'; };
+  sr.onerror = event => { $('speechState').textContent = 'Reconocimiento de voz: ' + event.error + '. El audio continúa grabándose.'; if (['not-allowed', 'service-not-allowed', 'audio-capture'].includes(event.error)) recognition = null; };
   sr.onend = () => { if (recording && !stopping && recognition === sr) { speechPrefix = $('transcript').value; try { sr.start(); } catch {} } };
   try { sr.start(); } catch { $('speechState').textContent = 'No se pudo iniciar el reconocimiento. El audio sigue activo.'; }
 }
@@ -191,6 +194,15 @@ async function toggleRecording() {
   }
   if (!window.isSecureContext) { audioStatus('Abre ECHO-404 en HTTPS o en localhost para permitir el micrófono.', true); return; }
   if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { audioStatus('Este navegador no ofrece captura de micrófono. Prueba Chrome, Edge o Firefox actualizado.', true); return; }
+  if (location.hostname.endsWith('.github.io') && !store.state.settings.speechEnabled) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SR && confirm('Para ver la transcripción en GitHub Pages se usa el reconocimiento del navegador. Puede enviar tu voz a su proveedor y requiere Internet. ¿Activarlo para esta reunión y las siguientes?')) {
+      store.state.settings.speechEnabled = true; store.save(); renderSettings();
+    } else if (!SR) {
+      $('speechState').textContent = 'Este navegador no admite transcripción en directo. El audio se guardará para usarlo con Whisper local.';
+      $('transcriptTab').click();
+    }
+  }
   $('record').disabled = true; let stream;
   try {
     audioStatus('Solicitando permiso de micrófono…');

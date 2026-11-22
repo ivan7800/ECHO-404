@@ -115,6 +115,21 @@ try {
     await page.reload(); await waitSaved(page); const filePromise = page.waitForEvent('download'); await page.locator('#downloadAudio').click();
     const file = await filePromise; assert.ok((await readFile(await file.path())).length > 0);
   });
+  await check('Browser speech appears live and remains saved after reload', async () => {
+    await page.evaluate(() => { window.SpeechRecognition = class {
+      start() { setTimeout(() => this.onresult?.({ results: [{ isFinal: true, 0: { transcript: 'Dictado de prueba' } }] }), 30); }
+      stop() {}
+    }; });
+    await page.locator('[data-view="settings"]').click(); await page.locator('#speechEnabled').check();
+    await page.locator('[data-view="dashboard"]').click(); await page.locator('#record').click();
+    await page.waitForFunction(() => document.getElementById('transcript').value.includes('Dictado de prueba'));
+    assert.equal(await page.locator('#transcriptPanel').isVisible(), true);
+    await page.locator('#record').click(); await page.locator('#downloadAudio').waitFor({ state: 'visible' });
+    await waitSaved(page); await page.reload(); await waitSaved(page);
+    assert.match(await page.locator('#transcript').inputValue(), /Dictado de prueba/);
+    await page.locator('[data-view="settings"]').click(); await page.locator('#speechEnabled').uncheck();
+    await page.locator('[data-view="dashboard"]').click();
+  });
   await check('Stopping a recording starts Whisper and saves its transcript', async () => {
     await page.route('**/api/ai/status', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
       whisper: { ready: true }, ollama: { available: false, models: [] }, maxAudioBytes: 128 * 1024 * 1024, maxSummaryChars: 20000
@@ -140,7 +155,7 @@ try {
   });
   await check('Offline shell opens without caching API responses', async () => {
     await page.evaluate(() => navigator.serviceWorker.ready); await page.waitForTimeout(500);
-    const keys = await page.evaluate(async () => { const c = await caches.open('echo-404-1.6.3-rc.2'); return (await c.keys()).map(r => r.url); });
+    const keys = await page.evaluate(async () => { const c = await caches.open('echo-404-1.6.3-rc.3'); return (await c.keys()).map(r => r.url); });
     assert.ok(keys.some(key => key.endsWith('/theme.css'))); assert.ok(keys.every(key => !key.includes('/api/')));
     await context.setOffline(true); await page.reload(); await page.locator('#saveMeeting').waitFor({ state: 'visible' });
     await page.waitForFunction(() => !document.getElementById('saveMeeting').disabled); assert.equal(await page.locator('#meetingTitle').inputValue(), 'Seguimiento VPN');

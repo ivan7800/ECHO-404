@@ -4,7 +4,7 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '1.6.3-rc.2'
+VERSION = '1.6.3-rc.3'
 FILES = [
     'README.md', 'CHANGELOG.md', 'RELEASE-CANDIDATE.md', 'LEEME_LANZADORES.txt',
     'CONFIGURACION-IA.md', 'QA-v1.6.1.md', 'QA-v1.6.2.md',

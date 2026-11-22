@@ -1,4 +1,4 @@
-# Voz y actas en ECHO-404 1.6.3 RC2
+# Voz y actas en ECHO-404 1.6.3 RC3
 
 Puedes tomar notas, grabar y organizar tareas desde el primer arranque. Instala Whisper para transcribir audio y Ollama para obtener un borrador del acta. Cada motor funciona de forma independiente.
 

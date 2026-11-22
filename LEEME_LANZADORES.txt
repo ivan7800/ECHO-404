@@ -1,4 +1,4 @@
-ECHO-404 1.6.3 RC2 — Windows / Linux
+ECHO-404 1.6.3 RC3 — Windows / Linux
 
 1. EXTRAER el ZIP completo. No ejecutar desde dentro del ZIP.
 2. Requisito: Python 3.9 o posterior.
